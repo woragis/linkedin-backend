@@ -1,0 +1,153 @@
+# Backend stack: Postgres + Redis + API + Workers
+#
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# API: http://127.0.0.1:8080
+
+name: linkedin-backend
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-linkedin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-linkedin}
+      POSTGRES_DB: ${POSTGRES_DB:-linkedin}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HTTP_ADDR: ${HTTP_ADDR:-:8080}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
+      INTERNAL_JOB_TOKEN: ${INTERNAL_JOB_TOKEN:-dev-internal-token}
+      MIGRATIONS_DIR: ${MIGRATIONS_DIR:-/migrations}
+      SKIP_SQL_MIGRATIONS: ${SKIP_SQL_MIGRATIONS:-0}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-1}
+    networks:
+      - internal
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  worker-realtime:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: realtime
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
+      OUTBOX_POLL_INTERVAL_SEC: ${OUTBOX_POLL_INTERVAL_SEC:-2}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  worker-batch:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: batch
+      BATCH_ENABLED: ${BATCH_ENABLED:-1}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  # Dev only: single worker with WORKER_ROLE=all
+  # docker compose --profile dev up worker-all
+  worker-all:
+    profiles: ["dev"]
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: all
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
+      BATCH_ENABLED: ${BATCH_ENABLED:-1}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy

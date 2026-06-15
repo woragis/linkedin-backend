@@ -1,0 +1,18 @@
+.env
+*.exe
+*.test
+.DS_Store
+
+# Go
+server/bin/
+
+# Python
+worker/**/__pycache__/
+worker/**/*.pyc
+worker/.pytest_cache/
+worker/.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
