@@ -149,7 +149,9 @@ services:
         condition: service_healthy
 
   # Synthetic population (psycopg direct writes)
-  # docker compose --profile sim up worker-simulator
+  # docker compose --profile sim up worker-simulator          # 2k agents
+  # docker compose --profile sim-small up worker-simulator-small
+  # docker compose --profile sim-large up worker-simulator-large  # 10k agents
   worker-simulator:
     profiles: ["sim"]
     build:
@@ -168,6 +170,68 @@ services:
       SIMULATOR_OUTBOX_EVERY: ${SIMULATOR_OUTBOX_EVERY:-100}
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-1}
       SIMULATOR_TIMEZONE: ${SIMULATOR_TIMEZONE:-America/Recife}
+      SIMULATOR_BOOTSTRAP_COMMIT_EVERY: ${SIMULATOR_BOOTSTRAP_COMMIT_EVERY:-100}
+      SIMULATOR_ENQUEUE_SEARCH: ${SIMULATOR_ENQUEUE_SEARCH:-0}
+      SIMULATOR_METRICS_ENABLED: ${SIMULATOR_METRICS_ENABLED:-1}
+      SIMULATOR_METRICS_PORT: ${SIMULATOR_METRICS_PORT:-9100}
+      SIMULATOR_GLOBAL_POSTS_POOL: ${SIMULATOR_GLOBAL_POSTS_POOL:-200}
+    ports:
+      - "127.0.0.1:9100:9100"
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  worker-simulator-small:
+    profiles: ["sim-small"]
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: simulator
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      SIMULATOR_AGENT_COUNT: "500"
+      SIMULATOR_SEED: ${SIMULATOR_SEED:-42}
+      SIMULATOR_PHASE: ${SIMULATOR_PHASE:-auto}
+      SIMULATOR_BATCH_SIZE: "30"
+      SIMULATOR_ENQUEUE_SEARCH: "1"
+      SIMULATOR_METRICS_PORT: "9101"
+    ports:
+      - "127.0.0.1:9101:9101"
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  worker-simulator-large:
+    profiles: ["sim-large"]
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: simulator
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      SIMULATOR_AGENT_COUNT: "10000"
+      SIMULATOR_SEED: ${SIMULATOR_SEED:-42}
+      SIMULATOR_PHASE: ${SIMULATOR_PHASE:-auto}
+      SIMULATOR_TICK_SEC: ${SIMULATOR_TICK_SEC:-1}
+      SIMULATOR_BATCH_SIZE: "100"
+      SIMULATOR_BOOTSTRAP_COMMIT_EVERY: "250"
+      SIMULATOR_ENQUEUE_SEARCH: "0"
+      SIMULATOR_GLOBAL_POSTS_POOL: "400"
+      SIMULATOR_METRICS_PORT: "9102"
+    ports:
+      - "127.0.0.1:9102:9102"
     networks:
       - internal
     depends_on:
