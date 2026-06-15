@@ -13,11 +13,17 @@ import (
 	authrepo "github.com/unipe/linkedin/backend/server/internal/auth/repository"
 	authsvc "github.com/unipe/linkedin/backend/server/internal/auth/service"
 	catalogrepo "github.com/unipe/linkedin/backend/server/internal/catalog/repository"
+	connrepo "github.com/unipe/linkedin/backend/server/internal/connection/repository"
+	connsvc "github.com/unipe/linkedin/backend/server/internal/connection/service"
+	eventrepo "github.com/unipe/linkedin/backend/server/internal/event/repository"
+	eventsvc "github.com/unipe/linkedin/backend/server/internal/event/service"
 	"github.com/unipe/linkedin/backend/server/internal/httpserver"
 	"github.com/unipe/linkedin/backend/server/internal/middleware"
 	"github.com/unipe/linkedin/backend/server/internal/migrate"
 	jwtmgr "github.com/unipe/linkedin/backend/server/internal/platform/jwt"
 	"github.com/unipe/linkedin/backend/server/internal/platform/postgres"
+	postrepo "github.com/unipe/linkedin/backend/server/internal/post/repository"
+	postsvc "github.com/unipe/linkedin/backend/server/internal/post/service"
 	profilerepo "github.com/unipe/linkedin/backend/server/internal/profile/repository"
 	profilesvc "github.com/unipe/linkedin/backend/server/internal/profile/service"
 	seedsvc "github.com/unipe/linkedin/backend/server/internal/seed/service"
@@ -74,10 +80,16 @@ func main() {
 	authRepository := authrepo.New(db)
 	profileRepository := profilerepo.New(db)
 	catalogRepository := catalogrepo.New(db)
+	connectionRepository := connrepo.New(db)
+	postRepository := postrepo.New(db)
+	eventRepository := eventrepo.New(db)
 
 	authService := authsvc.New(authRepository, db, jwt)
 	profileService := profilesvc.New(profileRepository, catalogRepository)
-	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository)
+	connectionService := connsvc.New(connectionRepository, db)
+	postService := postsvc.New(postRepository, connectionRepository, db)
+	eventService := eventsvc.New(eventRepository)
+	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository, connectionService, postService)
 
 	app := &httpserver.App{
 		DB:                db,
@@ -85,6 +97,9 @@ func main() {
 		JWTSecret:         jwtSecret,
 		Auth:              authService,
 		Profiles:          profileService,
+		Connections:       connectionService,
+		Posts:             postService,
+		Events:            eventService,
 		Seed:              seedService,
 	}
 
