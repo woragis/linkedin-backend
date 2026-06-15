@@ -8,15 +8,9 @@ from typing import Any
 
 import psycopg
 
-log = logging.getLogger("linkedin-worker.recommendations")
+from linkedin_worker.affinity import compute_affinity_score
 
-WEIGHTS = {
-    "mutual_connections": 0.35,
-    "same_school": 0.15,
-    "shared_skills": 0.12,
-    "same_company": 0.10,
-    "graduation_cohort": 0.08,
-}
+log = logging.getLogger("linkedin-worker.recommendations")
 
 
 def recompute_user(conn: psycopg.Connection, payload: dict[str, Any]) -> None:
@@ -90,9 +84,6 @@ def _score_viewer(conn: psycopg.Connection, viewer_id: str) -> None:
 
 
 def _affinity(conn: psycopg.Connection, viewer_id: str, target_id: str) -> tuple[float, list[str]]:
-    reasons: list[str] = []
-    score = 0.0
-
     mutual = conn.execute(
         """
         WITH viewer_peers AS (
@@ -108,9 +99,6 @@ def _affinity(conn: psycopg.Connection, viewer_id: str, target_id: str) -> tuple
         (viewer_id, viewer_id, target_id, target_id),
     ).fetchone()
     m = int(mutual[0]) if mutual else 0
-    if m > 0:
-        score += WEIGHTS["mutual_connections"] * min(m / 5.0, 1.0)
-        reasons.append(f"{m} mutual connections")
 
     school = conn.execute(
         """
@@ -121,9 +109,6 @@ def _affinity(conn: psycopg.Connection, viewer_id: str, target_id: str) -> tuple
         """,
         (viewer_id, target_id),
     ).fetchone()
-    if school:
-        score += WEIGHTS["same_school"]
-        reasons.append("same school")
 
     skills = conn.execute(
         """
@@ -134,9 +119,6 @@ def _affinity(conn: psycopg.Connection, viewer_id: str, target_id: str) -> tuple
         (viewer_id, target_id),
     ).fetchone()
     sk = int(skills[0]) if skills else 0
-    if sk > 0:
-        score += WEIGHTS["shared_skills"] * min(sk / 3.0, 1.0)
-        reasons.append(f"{sk} shared skills")
 
     company = conn.execute(
         """
@@ -147,9 +129,6 @@ def _affinity(conn: psycopg.Connection, viewer_id: str, target_id: str) -> tuple
         """,
         (viewer_id, target_id),
     ).fetchone()
-    if company:
-        score += WEIGHTS["same_company"]
-        reasons.append("same company")
 
     cohort = conn.execute(
         """
@@ -162,8 +141,11 @@ def _affinity(conn: psycopg.Connection, viewer_id: str, target_id: str) -> tuple
         """,
         (target_id, viewer_id),
     ).fetchone()
-    if cohort:
-        score += WEIGHTS["graduation_cohort"]
-        reasons.append("similar graduation period")
 
-    return score, reasons
+    return compute_affinity_score(
+        mutual_connections=m,
+        same_school=school is not None,
+        shared_skills=sk,
+        same_company=company is not None,
+        graduation_cohort=cohort is not None,
+    )
