@@ -4,12 +4,14 @@ import logging
 import random
 import signal
 import threading
+import time
 
 import psycopg
 
 from linkedin_worker import settings
 from linkedin_worker.simulator.bootstrap import bootstrap_agents
 from linkedin_worker.simulator.db import count_simulator_agents, load_agents
+from linkedin_worker.simulator.metrics import record_tick, start_metrics_server
 from linkedin_worker.simulator.steady import run_tick
 
 log = logging.getLogger("linkedin-worker.simulator")
@@ -30,6 +32,8 @@ def run_simulator() -> None:
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
+
+    start_metrics_server()
 
     conn = psycopg.connect(settings.DATABASE_URL)
     conn.autocommit = False
@@ -67,7 +71,7 @@ def _steady_loop(conn: psycopg.Connection) -> None:
     rng = random.Random(settings.SIMULATOR_SEED)
     agents = load_agents(conn)
     log.info(
-        "steady loop started tick_sec=%s batch_size=%s agents=%s markov=S3",
+        "steady loop started tick_sec=%s batch_size=%s agents=%s markov=S3 scale=S4",
         settings.SIMULATOR_TICK_SEC,
         settings.SIMULATOR_BATCH_SIZE,
         len(agents),
@@ -76,12 +80,16 @@ def _steady_loop(conn: psycopg.Connection) -> None:
         tick += 1
         if tick % 60 == 1:
             agents = load_agents(conn)
+        started = time.perf_counter()
         actions, breakdown = run_tick(conn, agents, rng)
+        elapsed = time.perf_counter() - started
+        record_tick(actions, dict(breakdown), elapsed, agents)
         log.info(
-            "tick=%s agents=%s actions=%s breakdown=%s",
+            "tick=%s agents=%s actions=%s duration_sec=%.3f breakdown=%s",
             tick,
             len(agents),
             actions,
+            elapsed,
             dict(breakdown),
         )
         if _stop.wait(settings.SIMULATOR_TICK_SEC):
