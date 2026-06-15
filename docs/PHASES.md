@@ -35,9 +35,9 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Frontend (repo separado)
 
-- [ ] Layout LinkedIn-like
-- [ ] Login / registro
-- [ ] Edição e visualização de perfil
+- [x] Layout LinkedIn-like
+- [x] Login / registro
+- [x] Edição e visualização de perfil
 
 **Critério de pronto:** criar conta, editar perfil, ver perfil público de outro usuário.
 
@@ -91,7 +91,7 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Frontend
 
-- [ ] Página `/network/graph`
+- [x] Página `/network` (grafo + influenciadores)
 
 **Critério de pronto:** dashboard mostra influência; grafo renderiza subgrafo do usuário.
 
