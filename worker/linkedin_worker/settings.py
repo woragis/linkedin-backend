@@ -13,6 +13,9 @@ BATCH_ENABLED = os.getenv("BATCH_ENABLED", "1").lower() in ("1", "true", "yes")
 
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "")
 
+KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "linkedin.jobs")
+
 # Cron expressions (batch worker)
 BATCH_CRON_GRAPH = os.getenv("BATCH_CRON_GRAPH", "0 */6 * * *")
 BATCH_CRON_RECOMMENDATIONS = os.getenv("BATCH_CRON_RECOMMENDATIONS", "30 */6 * * *")

@@ -1,4 +1,4 @@
-"""Transactional outbox → Redis relay."""
+"""Transactional outbox → Redis (+ optional Kafka) relay."""
 
 from __future__ import annotations
 
@@ -31,10 +31,36 @@ ERROR_SQL = """
 UPDATE outbox_jobs SET last_error = %s WHERE id = %s
 """
 
+_kafka_producer = None
+
+
+def _kafka_producer():
+    global _kafka_producer
+    if _kafka_producer is not None:
+        return _kafka_producer
+    if not settings.KAFKA_BROKERS:
+        return None
+    try:
+        from kafka import KafkaProducer
+
+        _kafka_producer = KafkaProducer(
+            bootstrap_servers=settings.KAFKA_BROKERS.split(","),
+            value_serializer=lambda v: json.dumps(v).encode(),
+        )
+        log.info("kafka producer connected brokers=%s", settings.KAFKA_BROKERS)
+    except Exception:
+        log.exception("kafka producer init failed")
+        return None
+    return _kafka_producer
+
 
 def _publish(r: redis.Redis, job_type: str, payload: dict[str, Any]) -> None:
-    body = json.dumps({"type": job_type, "payload": payload})
-    r.lpush(settings.REDIS_QUEUE_KEY, body)
+    body = {"type": job_type, "payload": payload}
+    r.lpush(settings.REDIS_QUEUE_KEY, json.dumps(body))
+    producer = _kafka_producer()
+    if producer is not None:
+        producer.send(settings.KAFKA_TOPIC, body)
+        producer.flush(1)
 
 
 def relay_once(conn: psycopg.Connection, r: redis.Redis) -> int:
@@ -56,7 +82,11 @@ def relay_once(conn: psycopg.Connection, r: redis.Redis) -> int:
 
 
 def relay_loop(conn: psycopg.Connection, r: redis.Redis) -> None:
-    log.info("outbox relay started interval=%ss", settings.OUTBOX_POLL_INTERVAL_SEC)
+    log.info(
+        "outbox relay started interval=%ss kafka=%s",
+        settings.OUTBOX_POLL_INTERVAL_SEC,
+        bool(settings.KAFKA_BROKERS),
+    )
     while True:
         try:
             n = relay_once(conn, r)

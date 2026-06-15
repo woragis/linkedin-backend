@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	analyticsrepo "github.com/unipe/linkedin/backend/server/internal/analytics/repository"
+	analyticsvc "github.com/unipe/linkedin/backend/server/internal/analytics/service"
 	authrepo "github.com/unipe/linkedin/backend/server/internal/auth/repository"
 	authsvc "github.com/unipe/linkedin/backend/server/internal/auth/service"
 	catalogrepo "github.com/unipe/linkedin/backend/server/internal/catalog/repository"
@@ -17,10 +19,15 @@ import (
 	connsvc "github.com/unipe/linkedin/backend/server/internal/connection/service"
 	eventrepo "github.com/unipe/linkedin/backend/server/internal/event/repository"
 	eventsvc "github.com/unipe/linkedin/backend/server/internal/event/service"
+	experimentrepo "github.com/unipe/linkedin/backend/server/internal/experiment/repository"
+	experimentsvc "github.com/unipe/linkedin/backend/server/internal/experiment/service"
+	graphrepo "github.com/unipe/linkedin/backend/server/internal/graph/repository"
+	graphsvc "github.com/unipe/linkedin/backend/server/internal/graph/service"
 	"github.com/unipe/linkedin/backend/server/internal/httpserver"
 	"github.com/unipe/linkedin/backend/server/internal/middleware"
 	"github.com/unipe/linkedin/backend/server/internal/migrate"
 	jwtmgr "github.com/unipe/linkedin/backend/server/internal/platform/jwt"
+	"github.com/unipe/linkedin/backend/server/internal/platform/cache"
 	"github.com/unipe/linkedin/backend/server/internal/platform/postgres"
 	postrepo "github.com/unipe/linkedin/backend/server/internal/post/repository"
 	postsvc "github.com/unipe/linkedin/backend/server/internal/post/service"
@@ -72,8 +79,6 @@ func main() {
 				log.Fatalf("sql migrate: %v", err)
 			}
 			log.Printf("sql migrations applied from %s", dir)
-		} else {
-			log.Print("warning: SQL migrations skipped (set MIGRATIONS_DIR)")
 		}
 	}
 
@@ -92,13 +97,22 @@ func main() {
 	authService := authsvc.New(authRepository, db, jwt)
 	profileService := profilesvc.New(profileRepository, catalogRepository, db)
 	connectionService := connsvc.New(connectionRepository, db)
-	postService := postsvc.New(postRepository, connectionRepository, db)
+	experimentRepository := experimentrepo.New(db)
+	experimentService := experimentsvc.New(experimentRepository)
+
+	feedCache, _ := cache.NewFeedCache(os.Getenv("REDIS_URL"), 60*time.Second)
+
+	postService := postsvc.New(postRepository, connectionRepository, experimentService, feedCache, db)
 	eventService := eventsvc.New(eventRepository)
 	searchRepository := searchrepo.New(db)
 	esClient := elasticsearch.New(strings.TrimSpace(os.Getenv("ELASTICSEARCH_URL")))
 	searchService := searchsvc.New(searchRepository, esClient)
 	recommendationRepository := recorepo.New(db)
 	recommendationService := recosvc.New(recommendationRepository)
+	graphRepository := graphrepo.New(db)
+	graphService := graphsvc.New(graphRepository)
+	analyticsRepository := analyticsrepo.New(db)
+	analyticsService := analyticsvc.New(analyticsRepository)
 	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository, connectionService, postService)
 
 	app := &httpserver.App{
@@ -112,6 +126,9 @@ func main() {
 		Events:            eventService,
 		Search:            searchService,
 		Recommendations:   recommendationService,
+		Graph:             graphService,
+		Analytics:         analyticsService,
+		Experiments:       experimentService,
 		Seed:              seedService,
 	}
 

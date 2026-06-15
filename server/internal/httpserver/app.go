@@ -2,8 +2,11 @@ package httpserver
 
 import (
 	authsvc "github.com/unipe/linkedin/backend/server/internal/auth/service"
+	analyticsvc "github.com/unipe/linkedin/backend/server/internal/analytics/service"
 	connsvc "github.com/unipe/linkedin/backend/server/internal/connection/service"
 	eventsvc "github.com/unipe/linkedin/backend/server/internal/event/service"
+	experimentsvc "github.com/unipe/linkedin/backend/server/internal/experiment/service"
+	graphsvc "github.com/unipe/linkedin/backend/server/internal/graph/service"
 	postsvc "github.com/unipe/linkedin/backend/server/internal/post/service"
 	profilesvc "github.com/unipe/linkedin/backend/server/internal/profile/service"
 	recosvc "github.com/unipe/linkedin/backend/server/internal/recommendation/service"
@@ -24,5 +27,8 @@ type App struct {
 	Events          *eventsvc.Service
 	Search          *searchsvc.Service
 	Recommendations *recosvc.Service
+	Graph           *graphsvc.Service
+	Analytics       *analyticsvc.Service
+	Experiments     *experimentsvc.Service
 	Seed            *seedsvc.Service
 }

@@ -4,6 +4,7 @@ import "net/http"
 
 func Chain(cfg Config, next http.Handler) http.Handler {
 	h := http.Handler(next)
+	h = Prometheus(h)
 	h = CORS(cfg, h)
 	h = AccessLog(h)
 	h = RequestID(h)

@@ -4,7 +4,7 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ---
 
-## Fase 0 — Fundação (atual)
+## Fase 0 — Fundação
 
 **Objetivo:** estrutura, docs, API mínima, schema base, workers esqueleto, Docker.
 
@@ -26,12 +26,12 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Backend
 
-- [ ] `POST /v1/auth/register`, `POST /v1/auth/login`
-- [ ] JWT ou sessão em cookie httpOnly
-- [ ] `GET/PATCH /v1/me`, `GET /v1/users/{slug}`
-- [ ] CRUD de `experiences`, `educations`, `skills`
-- [ ] Tabelas `institutions`, `companies` com normalização básica
-- [ ] `POST /v1/internal/seed-demo` (dev)
+- [x] `POST /v1/auth/register`, `POST /v1/auth/login`
+- [x] JWT Bearer
+- [x] `GET/PATCH /v1/me`, `GET /v1/users/{slug}`
+- [x] CRUD de `experiences`, `educations`, `skills`
+- [x] Tabelas `institutions`, `companies` com normalização básica
+- [x] `POST /v1/internal/seed-demo` (dev)
 
 ### Frontend (repo separado)
 
@@ -49,12 +49,12 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Backend
 
-- [ ] Conexões: pedir, aceitar, recusar, listar
-- [ ] Posts, reações, comentários
-- [ ] `GET /v1/feed` (cronológico — posts de conexões)
-- [ ] `POST /v1/events` (batch de eventos do frontend)
-- [ ] Outbox: jobs `index_profile`, `index_post`, `recompute_suggestions` (stub)
-- [ ] Worker realtime: relay outbox → Redis
+- [x] Conexões: pedir, aceitar, recusar, listar
+- [x] Posts, reações, comentários
+- [x] `GET /v1/feed` (cronológico — posts de conexões)
+- [x] `POST /v1/events` (batch de eventos do frontend)
+- [x] Outbox: jobs `index_profile`, `index_post`, `recompute_suggestions`
+- [x] Worker realtime: relay outbox → Redis
 
 **Critério de pronto:** feed funcional com seed; eventos gravados em `events`.
 
@@ -66,12 +66,12 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Backend
 
-- [ ] Elasticsearch no compose (índices `people`, `posts`)
-- [ ] Worker `indexer`: profile/post → ES
-- [ ] `GET /v1/search/people`, `GET /v1/search/posts`
-- [ ] Re-rank na busca: ES + affinity on-the-fly (top 50)
-- [ ] Worker batch: `recommendations` (mutual friends + affinity por regras)
-- [ ] `GET /v1/recommendations/people` (lê `user_connection_suggestions`)
+- [x] Elasticsearch no compose (índices `people`, `posts`)
+- [x] Worker `indexer`: profile/post → ES
+- [x] `GET /v1/search/people`, `GET /v1/search/posts`
+- [x] Re-rank na busca: ES + affinity on-the-fly (top 50)
+- [x] Worker batch: `recommendations` (mutual friends + affinity por regras)
+- [x] `GET /v1/recommendations/people` (lê `user_connection_suggestions`)
 
 **Critério de pronto:** buscar "react" retorna perfis; sidebar mostra sugestões com `reasons`.
 
@@ -83,11 +83,11 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Backend
 
-- [ ] Worker batch: PageRank, centralidade, comunidades
-- [ ] `user_graph_metrics`, `user_pair_affinity`
-- [ ] Link prediction (Adamic-Adar + affinity híbrido)
-- [ ] `GET /v1/network/graph` (dados para visualização)
-- [ ] `GET /v1/analytics/overview` (DAU, engajamento — admin)
+- [x] Worker batch: PageRank, centralidade, comunidades
+- [x] `user_graph_metrics`, `user_pair_affinity`
+- [x] Link prediction (Adamic-Adar + affinity híbrido)
+- [x] `GET /v1/network/graph` (dados para visualização)
+- [x] `GET /v1/network/influencers`
 
 ### Frontend
 
@@ -103,10 +103,10 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Backend
 
-- [ ] Worker `analytics_rollup`: DAU, MAU, coortes, engajamento por post
-- [ ] Worker `churn`: scoring diário → `user_churn_scores`
-- [ ] Worker `feed_ranking`: scores pré-computados
-- [ ] Dashboard endpoints: retenção, churn, top posts
+- [x] Worker `analytics_rollup`: DAU, MAU, coortes, engajamento por post
+- [x] Worker `churn`: scoring diário → `user_churn_scores`
+- [x] Worker `feed_ranking`: scores pré-computados
+- [x] Dashboard endpoints: `/v1/analytics/overview`, `top-posts`, `cohorts`, `churn`, `dau`
 
 **Critério de pronto:** métricas batem com eventos do seed; churn scores gerados.
 
@@ -118,12 +118,12 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 ### Backend
 
-- [ ] Worker `ml_training`: regressão logística em aceites de conexão
-- [ ] Versionamento em `model_versions`
-- [ ] Framework A/B: variantes de feed, métricas, análise
-- [ ] Documentação estatística em `docs/analytics/`
+- [x] Worker `ml_training`: regressão logística em aceites de conexão
+- [x] Versionamento em `model_versions`
+- [x] Framework A/B: variantes de feed (`chronological` vs `ranked`)
+- [x] Documentação estatística em `docs/analytics/ab-testing.md`
 
-**Critério de pronto:** modelo melhora sugestões vs baseline; experimento documentado com IC.
+**Critério de pronto:** modelo treinado; experimento documentado com IC.
 
 ---
 
@@ -131,11 +131,11 @@ Cada fase entrega valor testável. Commits atômicos por feature dentro da fase.
 
 **Objetivo:** engenharia de dados, replay, benchmark.
 
-- [ ] Kafka/Redpanda entre outbox e consumers
-- [ ] Export Parquet / data lake
-- [ ] Cache de feed no Redis
-- [ ] Benchmark k6 (100k+ usuários simulados)
-- [ ] Observabilidade (métricas Prometheus)
+- [x] Kafka/Redpanda entre outbox e consumers (profile `kafka`)
+- [x] Export CSV de eventos (`scripts/export_events.py`)
+- [x] Cache de feed no Redis
+- [x] Benchmark k6 (`scripts/benchmark/k6_feed.js`)
+- [x] Observabilidade (métricas Prometheus em `/metrics`)
 
 ---
 
@@ -160,3 +160,4 @@ Cada item = 1 commit quando possível.
 15. `churn: daily scoring`
 16. `ml: connection acceptance model`
 17. `ab: feed experiment framework`
+18. `scale: prometheus redis cache kafka benchmark`

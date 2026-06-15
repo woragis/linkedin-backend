@@ -173,3 +173,28 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+
+  # Optional Kafka-compatible broker (phase 7)
+  # docker compose --profile kafka up -d
+  redpanda:
+    profiles: ["kafka"]
+    image: redpandadata/redpanda:v24.2.4
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12

@@ -4,10 +4,12 @@ import (
 	"net/http"
 
 	"github.com/unipe/linkedin/backend/server/internal/middleware"
+	"github.com/unipe/linkedin/backend/server/internal/observability/metrics"
 )
 
 func Mount(mux *http.ServeMux, app *App) {
 	mux.HandleFunc("GET /health", handleHealth)
+	mux.Handle("GET /metrics", metrics.Handler())
 	if app != nil && app.DB != nil {
 		mux.HandleFunc("GET /ready", handleReady(app.DB))
 	}
@@ -76,6 +78,21 @@ func Mount(mux *http.ServeMux, app *App) {
 	if app.Recommendations != nil {
 		rh := newRecommendationHandler(app.Recommendations)
 		mux.Handle("GET /v1/recommendations/people", require(http.HandlerFunc(rh.people)))
+	}
+
+	if app.Graph != nil {
+		gh := newGraphHandler(app.Graph)
+		mux.Handle("GET /v1/network/graph", require(http.HandlerFunc(gh.userGraph)))
+		mux.HandleFunc("GET /v1/network/influencers", gh.influencers)
+	}
+
+	if app.Analytics != nil {
+		ah := newAnalyticsHandler(app.Analytics)
+		mux.Handle("GET /v1/analytics/overview", require(http.HandlerFunc(ah.overview)))
+		mux.Handle("GET /v1/analytics/top-posts", require(http.HandlerFunc(ah.topPosts)))
+		mux.Handle("GET /v1/analytics/cohorts", require(http.HandlerFunc(ah.cohorts)))
+		mux.Handle("GET /v1/analytics/churn", require(http.HandlerFunc(ah.churn)))
+		mux.Handle("GET /v1/analytics/dau", require(http.HandlerFunc(ah.dau)))
 	}
 
 	if app.Seed != nil {
