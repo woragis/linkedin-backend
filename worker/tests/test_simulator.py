@@ -108,3 +108,77 @@ def test_choose_action_excludes_accept_without_pending():
     actions = {choose_action(rng, agent, can_accept=False) for _ in range(100)}
     assert "accept" not in actions
 
+
+def test_is_active_hour_wraparound():
+    from linkedin_worker.simulator.archetypes import is_active_hour
+
+    assert is_active_hour("programmer", 21)
+    assert is_active_hour("programmer", 1)
+    assert not is_active_hour("programmer", 12)
+    assert is_active_hour("fitness", 7)
+    assert not is_active_hour("fitness", 14)
+
+
+def test_markov_offline_outside_active_window():
+    from uuid import uuid4
+
+    from linkedin_worker.simulator.agent import Agent
+    from linkedin_worker.simulator.markov import step
+
+    agent = Agent(
+        user_id=uuid4(),
+        archetype="programmer",
+        age=28,
+        gender="M",
+        city="Recife",
+        latitude=-8.0,
+        longitude=-34.8,
+        extraversion=0.5,
+        activity_level=0.6,
+        interests=["go"],
+        markov_state="offline",
+    )
+    rng = random.Random(99)
+    # programmer active 20-02; hour 12 should rarely wake
+    result = step(agent, 12, rng)
+    assert result.state == "offline"
+    assert result.action is None
+
+
+def test_markov_wake_emits_session():
+    from uuid import uuid4
+
+    from linkedin_worker.simulator.agent import Agent
+    from linkedin_worker.simulator.markov import step
+
+    agent = Agent(
+        user_id=uuid4(),
+        archetype="programmer",
+        age=28,
+        gender="M",
+        city="Recife",
+        latitude=-8.0,
+        longitude=-34.8,
+        extraversion=0.5,
+        activity_level=0.9,
+        interests=["go"],
+        markov_state="offline",
+    )
+    rng = random.Random(1)
+    result = step(agent, 21, rng)
+    assert result.state == "browsing"
+    assert result.session_start is True
+
+
+def test_fitness_post_probability_higher_in_window():
+    from linkedin_worker.simulator.archetypes import post_transition_probability
+
+    class Stub:
+        archetype = "fitness"
+        activity_level = 0.7
+
+    in_window = post_transition_probability(Stub(), 7)
+    out_window = post_transition_probability(Stub(), 15)
+    assert in_window > out_window
+
+

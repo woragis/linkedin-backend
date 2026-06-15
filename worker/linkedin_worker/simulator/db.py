@@ -173,3 +173,15 @@ def pending_requester_for_addressee(conn: psycopg.Connection, addressee_id: UUID
         (addressee_id,),
     ).fetchone()
     return row[0] if row else None
+
+
+def update_markov_state(conn: psycopg.Connection, user_id: UUID, state: str) -> None:
+    conn.execute(
+        """
+        UPDATE simulator_agents
+        SET markov_state = %s
+        WHERE user_id = %s
+        """,
+        (state, user_id),
+    )
+

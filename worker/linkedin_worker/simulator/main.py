@@ -67,7 +67,7 @@ def _steady_loop(conn: psycopg.Connection) -> None:
     rng = random.Random(settings.SIMULATOR_SEED)
     agents = load_agents(conn)
     log.info(
-        "steady loop started tick_sec=%s batch_size=%s agents=%s",
+        "steady loop started tick_sec=%s batch_size=%s agents=%s markov=S3",
         settings.SIMULATOR_TICK_SEC,
         settings.SIMULATOR_BATCH_SIZE,
         len(agents),

@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 import random
-from typing import Any
+from typing import Any, Protocol
+
+
+class AgentLike(Protocol):
+    archetype: str
+    activity_level: float
+    extraversion: float
+    markov_state: str
+
 
 ARCHETYPES: dict[str, dict[str, Any]] = {
     "programmer": {
@@ -142,3 +150,36 @@ def profile_fields(rng: random.Random, archetype: str) -> dict[str, Any]:
 
 def _clamp(value: float, low: float = 0.05, high: float = 0.95) -> float:
     return max(low, min(high, value))
+
+
+def is_active_hour(archetype: str, hour: int) -> bool:
+    """True when local hour falls inside the archetype activity window."""
+    spec = ARCHETYPES.get(archetype, ARCHETYPES["student"])
+    start, end = spec["active_hours"]
+    if start <= end:
+        return start <= hour <= end
+    return hour >= start or hour <= end
+
+
+def wake_probability(agent: AgentLike, hour: int, active: bool) -> float:
+    if active:
+        return min(0.88, 0.50 + 0.35 * agent.activity_level)
+    return 0.04 * agent.activity_level
+
+
+def post_transition_probability(agent: AgentLike, hour: int) -> float:
+    base = 0.10 + 0.08 * agent.activity_level
+    if agent.archetype == "fitness" and is_active_hour("fitness", hour):
+        base = 0.28 + 0.10 * agent.activity_level
+    if agent.archetype == "entrepreneur" and 8 <= hour <= 12:
+        base = max(base, 0.18)
+    return min(0.40, base)
+
+
+def connect_transition_probability(agent: AgentLike, hour: int) -> float:
+    base = 0.06 + 0.08 * agent.extraversion
+    if agent.archetype == "recruiter" and 9 <= hour <= 17:
+        base = 0.22 + 0.10 * agent.extraversion
+    if agent.archetype == "student" and 14 <= hour <= 20:
+        base = max(base, 0.14)
+    return min(0.35, base)
