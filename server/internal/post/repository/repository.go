@@ -43,6 +43,52 @@ func (r *Repository) Feed(ctx context.Context, userID uuid.UUID, peerIDs []uuid.
 	return rows, err
 }
 
+func (r *Repository) RankedFeed(ctx context.Context, userID uuid.UUID, limit int) ([]models.Post, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var ids []uuid.UUID
+	err := r.db.WithContext(ctx).Table("user_feed_scores").
+		Select("post_id").
+		Where("user_id = ?", userID).
+		Order("score DESC").
+		Limit(limit).
+		Scan(&ids).Error
+	if err != nil || len(ids) == 0 {
+		var rows []models.Post
+		err = r.db.WithContext(ctx).Preload("Author").
+			Where(`deleted_at IS NULL AND (
+				author_id = ? OR author_id IN (
+					SELECT CASE WHEN requester_id = ? THEN addressee_id ELSE requester_id END
+					FROM connections WHERE status = 'accepted' AND ? IN (requester_id, addressee_id)
+				)
+			)`, userID, userID, userID).
+			Order("created_at DESC").
+			Limit(limit).
+			Find(&rows).Error
+		return rows, err
+	}
+	var rows []models.Post
+	err = r.db.WithContext(ctx).Preload("Author").
+		Where("deleted_at IS NULL AND id IN ?", ids).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	// preserve rank order
+	byID := make(map[uuid.UUID]models.Post, len(rows))
+	for _, p := range rows {
+		byID[p.ID] = p
+	}
+	ordered := make([]models.Post, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			ordered = append(ordered, p)
+		}
+	}
+	return ordered, nil
+}
+
 func (r *Repository) AddReaction(ctx context.Context, postID, userID uuid.UUID, kind string) error {
 	rxn := models.Reaction{PostID: postID, UserID: userID, Kind: kind}
 	return r.db.WithContext(ctx).Save(&rxn).Error

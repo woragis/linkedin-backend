@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
 	connrepo "github.com/unipe/linkedin/backend/server/internal/connection/repository"
+	experimentsvc "github.com/unipe/linkedin/backend/server/internal/experiment/service"
 	"github.com/unipe/linkedin/backend/server/internal/models"
+	"github.com/unipe/linkedin/backend/server/internal/platform/cache"
 	"github.com/unipe/linkedin/backend/server/internal/platform/outbox"
 	postrepo "github.com/unipe/linkedin/backend/server/internal/post/repository"
 	"gorm.io/gorm"
@@ -17,11 +19,25 @@ import (
 type Service struct {
 	posts       *postrepo.Repository
 	connections *connrepo.Repository
+	experiments *experimentsvc.Service
+	feedCache   *cache.FeedCache
 	db          *gorm.DB
 }
 
-func New(posts *postrepo.Repository, connections *connrepo.Repository, db *gorm.DB) *Service {
-	return &Service{posts: posts, connections: connections, db: db}
+func New(
+	posts *postrepo.Repository,
+	connections *connrepo.Repository,
+	experiments *experimentsvc.Service,
+	feedCache *cache.FeedCache,
+	db *gorm.DB,
+) *Service {
+	return &Service{
+		posts:       posts,
+		connections: connections,
+		experiments: experiments,
+		feedCache:   feedCache,
+		db:          db,
+	}
 }
 
 type CreatePostRequest struct {
@@ -97,25 +113,4 @@ func (s *Service) Comment(ctx context.Context, userID, postID uuid.UUID, req Cre
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
 	return c, nil
-}
-
-func (s *Service) Feed(ctx context.Context, userID uuid.UUID, limit int) ([]PostView, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 50
-	}
-	peers, err := s.connections.ListAcceptedPeerIDs(ctx, userID)
-	if err != nil {
-		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
-	}
-	rows, err := s.posts.Feed(ctx, userID, peers, limit)
-	if err != nil {
-		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
-	}
-	out := make([]PostView, 0, len(rows))
-	for _, p := range rows {
-		rc, _ := s.posts.ReactionCount(ctx, p.ID)
-		cc, _ := s.posts.CommentCount(ctx, p.ID)
-		out = append(out, PostView{Post: p, ReactionCount: rc, CommentCount: cc})
-	}
-	return out, nil
 }
