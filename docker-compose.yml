@@ -60,6 +60,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
       INTERNAL_JOB_TOKEN: ${INTERNAL_JOB_TOKEN:-dev-internal-token}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       MIGRATIONS_DIR: ${MIGRATIONS_DIR:-/migrations}
       SKIP_SQL_MIGRATIONS: ${SKIP_SQL_MIGRATIONS:-0}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
