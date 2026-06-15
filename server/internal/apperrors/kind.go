@@ -6,6 +6,8 @@ const (
 	KindInvalid Kind = iota
 	KindNotFound
 	KindForbidden
+	KindUnauthorized
+	KindConflict
 	KindInternal
 	KindUnavailable
 )

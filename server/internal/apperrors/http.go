@@ -22,6 +22,10 @@ func HTTPStatus(err error) int {
 			return http.StatusNotFound
 		case KindForbidden:
 			return http.StatusForbidden
+		case KindUnauthorized:
+			return http.StatusUnauthorized
+		case KindConflict:
+			return http.StatusConflict
 		case KindInternal:
 			return http.StatusInternalServerError
 		case KindUnavailable:

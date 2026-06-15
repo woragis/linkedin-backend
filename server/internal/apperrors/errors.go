@@ -30,6 +30,14 @@ func Forbidden(code, msg string) *Error {
 	return &Error{Code: code, Message: msg, Kind: KindForbidden}
 }
 
+func Unauthorized(code, msg string) *Error {
+	return &Error{Code: code, Message: msg, Kind: KindUnauthorized}
+}
+
+func Conflict(code, msg string) *Error {
+	return &Error{Code: code, Message: msg, Kind: KindConflict}
+}
+
 func InternalCause(code, msg string, cause error) *Error {
 	return &Error{Code: code, Message: msg, Kind: KindInternal, Cause: cause}
 }
