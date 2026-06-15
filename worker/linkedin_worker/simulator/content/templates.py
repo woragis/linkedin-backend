@@ -36,6 +36,40 @@ TEMPLATES: dict[str, list[str]] = {
 }
 
 
+COMMENT_TEMPLATES: dict[str, list[str]] = {
+    "tech": [
+        "Concordo — já vi isso em produção também.",
+        "Boa! Qual stack vocês usaram?",
+        "Interessante. Vou testar essa abordagem.",
+    ],
+    "fitness": [
+        "Boa! Consistência é tudo.",
+        "Inspirador — vou tentar amanhã.",
+        "Qual foi o volume de treino?",
+    ],
+    "career": [
+        "Boa sorte na entrevista!",
+        "Networking faz diferença mesmo.",
+        "Parabéns pelo progresso!",
+    ],
+    "business": [
+        "Validação é o passo mais importante.",
+        "Boa métrica — como mediram retenção?",
+        "Marco importante, parabéns!",
+    ],
+    "design": [
+        "Fluxo ficou mais claro assim.",
+        "Acessibilidade é fundamental.",
+        "Bom insight de usabilidade.",
+    ],
+}
+
+
 def pick_post_body(rng: random.Random, topic: str) -> str:
     pool = TEMPLATES.get(topic) or TEMPLATES["tech"]
+    return rng.choice(pool)
+
+
+def pick_comment_body(rng: random.Random, topic: str) -> str:
+    pool = COMMENT_TEMPLATES.get(topic) or COMMENT_TEMPLATES["tech"]
     return rng.choice(pool)

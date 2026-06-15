@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import math
+import random
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from linkedin_worker.simulator.agent import Agent
 
 
 def sigmoid(x: float) -> float:
@@ -51,3 +56,63 @@ def affinity_score(
         + w_age * age_score(age_delta)
         + w_pop * pop_term
     )
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * radius * math.asin(math.sqrt(a))
+
+
+def agent_distance_km(a: Agent, b: Agent, default_km: float = 500.0) -> float:
+    if a.latitude is None or a.longitude is None or b.latitude is None or b.longitude is None:
+        return default_km
+    return haversine_km(a.latitude, a.longitude, b.latitude, b.longitude)
+
+
+def simple_affinity(a: Agent, b: Agent) -> float:
+    """S2: interests + geo only."""
+    dist = agent_distance_km(a, b)
+    return 0.6 * jaccard(set(a.interests), set(b.interests)) + 0.4 * geo_score(dist)
+
+
+def pick_target(agent: Agent, candidates: list[Agent], rng: random.Random) -> Agent | None:
+    pool = [c for c in candidates if c.user_id != agent.user_id]
+    if not pool:
+        return None
+    ranked = sorted(pool, key=lambda c: simple_affinity(agent, c), reverse=True)
+    top = ranked[: min(20, len(ranked))]
+    weights = [max(simple_affinity(agent, c), 0.01) for c in top]
+    return rng.choices(top, weights=weights, k=1)[0]
+
+
+ACTION_WEIGHTS: dict[str, float] = {
+    "post": 0.15,
+    "like": 0.30,
+    "comment": 0.12,
+    "view": 0.28,
+    "connect": 0.10,
+    "accept": 0.05,
+}
+
+
+def choose_action(rng: random.Random, agent: Agent, *, can_accept: bool) -> str:
+    weights = dict(ACTION_WEIGHTS)
+    if not can_accept:
+        weights.pop("accept", None)
+    scale = max(0.2, agent.activity_level)
+    weighted: dict[str, float] = {}
+    for key, base in weights.items():
+        value = base * scale
+        if key == "comment":
+            value *= max(0.5, agent.extraversion)
+        if key == "connect":
+            value *= max(0.5, agent.extraversion)
+        weighted[key] = value
+    labels = list(weighted.keys())
+    probs = [weighted[k] for k in labels]
+    total = sum(probs)
+    return rng.choices(labels, weights=[p / total for p in probs], k=1)[0]

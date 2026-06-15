@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import signal
 import threading
 
@@ -8,7 +9,8 @@ import psycopg
 
 from linkedin_worker import settings
 from linkedin_worker.simulator.bootstrap import bootstrap_agents
-from linkedin_worker.simulator.db import count_simulator_agents
+from linkedin_worker.simulator.db import count_simulator_agents, load_agents
+from linkedin_worker.simulator.steady import run_tick
 
 log = logging.getLogger("linkedin-worker.simulator")
 
@@ -62,18 +64,25 @@ def run_simulator() -> None:
 
 def _steady_loop(conn: psycopg.Connection) -> None:
     tick = 0
+    rng = random.Random(settings.SIMULATOR_SEED)
+    agents = load_agents(conn)
     log.info(
-        "steady loop started tick_sec=%s batch_size=%s",
+        "steady loop started tick_sec=%s batch_size=%s agents=%s",
         settings.SIMULATOR_TICK_SEC,
         settings.SIMULATOR_BATCH_SIZE,
+        len(agents),
     )
     while not _stop.is_set():
         tick += 1
-        agent_count = count_simulator_agents(conn)
+        if tick % 60 == 1:
+            agents = load_agents(conn)
+        actions, breakdown = run_tick(conn, agents, rng)
         log.info(
-            "tick=%s agents=%s actions=0 phase=steady (S2 interactions pending)",
+            "tick=%s agents=%s actions=%s breakdown=%s",
             tick,
-            agent_count,
+            len(agents),
+            actions,
+            dict(breakdown),
         )
         if _stop.wait(settings.SIMULATOR_TICK_SEC):
             break
