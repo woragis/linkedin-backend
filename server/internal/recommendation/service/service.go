@@ -3,18 +3,25 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
+	experimentrepo "github.com/unipe/linkedin/backend/server/internal/experiment/repository"
 	recorepo "github.com/unipe/linkedin/backend/server/internal/recommendation/repository"
+	"gorm.io/gorm"
 )
 
+const ScoringMethodRuleBased = "rule_based_affinity"
+const ConnectionAcceptanceModel = "connection_acceptance"
+
 type Service struct {
-	repo *recorepo.Repository
+	repo           *recorepo.Repository
+	experimentRepo *experimentrepo.Repository
 }
 
-func New(repo *recorepo.Repository) *Service {
-	return &Service{repo: repo}
+func New(repo *recorepo.Repository, experimentRepo *experimentrepo.Repository) *Service {
+	return &Service{repo: repo, experimentRepo: experimentRepo}
 }
 
 type PersonSuggestion struct {
@@ -49,4 +56,26 @@ func (s *Service) People(ctx context.Context, viewerID uuid.UUID) ([]PersonSugge
 		})
 	}
 	return out, nil
+}
+
+type PeopleMetaResponse struct {
+	ScoringMethod string                    `json:"scoring_method"`
+	MLModel       *experimentrepo.MLModel     `json:"ml_model,omitempty"`
+	Suggestions   []PersonSuggestion        `json:"suggestions"`
+}
+
+func (s *Service) PeopleWithMeta(ctx context.Context, viewerID uuid.UUID) (*PeopleMetaResponse, error) {
+	suggestions, err := s.People(ctx, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	model, err := s.experimentRepo.ActiveMLModel(ctx, ConnectionAcceptanceModel)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	return &PeopleMetaResponse{
+		ScoringMethod: ScoringMethodRuleBased,
+		MLModel:       model,
+		Suggestions:   suggestions,
+	}, nil
 }

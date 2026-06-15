@@ -66,6 +66,7 @@ func Mount(mux *http.ServeMux, app *App) {
 		mux.HandleFunc("GET /v1/posts/{id}", po.get)
 		mux.Handle("POST /v1/posts/{id}/reactions", require(http.HandlerFunc(po.react)))
 		mux.Handle("POST /v1/posts/{id}/comments", require(http.HandlerFunc(po.comment)))
+		mux.HandleFunc("GET /v1/posts/{id}/comments", po.listComments)
 		mux.Handle("GET /v1/feed", require(http.HandlerFunc(po.feed)))
 	}
 
@@ -78,12 +79,14 @@ func Mount(mux *http.ServeMux, app *App) {
 	if app.Recommendations != nil {
 		rh := newRecommendationHandler(app.Recommendations)
 		mux.Handle("GET /v1/recommendations/people", require(http.HandlerFunc(rh.people)))
+		mux.Handle("GET /v1/recommendations/meta", require(http.HandlerFunc(rh.peopleMeta)))
 	}
 
 	if app.Graph != nil {
 		gh := newGraphHandler(app.Graph)
 		mux.Handle("GET /v1/network/graph", require(http.HandlerFunc(gh.userGraph)))
 		mux.HandleFunc("GET /v1/network/influencers", gh.influencers)
+		mux.Handle("GET /v1/network/link-predictions", require(http.HandlerFunc(gh.linkPredictions)))
 	}
 
 	if app.Analytics != nil {
@@ -93,6 +96,8 @@ func Mount(mux *http.ServeMux, app *App) {
 		mux.Handle("GET /v1/analytics/cohorts", require(http.HandlerFunc(ah.cohorts)))
 		mux.Handle("GET /v1/analytics/churn", require(http.HandlerFunc(ah.churn)))
 		mux.Handle("GET /v1/analytics/dau", require(http.HandlerFunc(ah.dau)))
+		mux.Handle("GET /v1/analytics/experiments", require(http.HandlerFunc(ah.experiments)))
+		mux.Handle("GET /v1/analytics/ml-models", require(http.HandlerFunc(ah.mlModels)))
 	}
 
 	if app.Seed != nil {

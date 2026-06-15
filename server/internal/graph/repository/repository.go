@@ -22,6 +22,15 @@ type GraphEdge struct {
 	Target uuid.UUID `json:"target"`
 }
 
+type LinkPrediction struct {
+	UserID   uuid.UUID `json:"user_id"`
+	Slug     string    `json:"slug"`
+	FullName string    `json:"full_name"`
+	Headline string    `json:"headline"`
+	Score    float64   `json:"score"`
+	Reasons  string    `json:"reasons"`
+}
+
 type Repository struct {
 	db *gorm.DB
 }
@@ -80,4 +89,26 @@ ORDER BY gm.pagerank DESC
 LIMIT ?
 `, limit).Scan(&nodes).Error
 	return nodes, err
+}
+
+func (r *Repository) LinkPredictions(ctx context.Context, viewerID uuid.UUID, limit int) ([]LinkPrediction, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	var rows []LinkPrediction
+	err := r.db.WithContext(ctx).Raw(`
+SELECT p.user_id, p.slug, p.full_name, p.headline, a.score, a.reasons::text
+FROM user_pair_affinity a
+JOIN profiles p ON p.user_id = a.target_id
+WHERE a.viewer_id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM connections c
+    WHERE c.status = 'accepted'
+      AND ((c.requester_id = ? AND c.addressee_id = a.target_id)
+        OR (c.addressee_id = ? AND c.requester_id = a.target_id))
+  )
+ORDER BY a.score DESC
+LIMIT ?
+`, viewerID, viewerID, viewerID, limit).Scan(&rows).Error
+	return rows, err
 }

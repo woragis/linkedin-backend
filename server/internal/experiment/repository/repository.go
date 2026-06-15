@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -59,4 +60,67 @@ func hashIndex(s string) int {
 		h *= 16777619
 	}
 	return int(h)
+}
+
+type ABExperimentResult struct {
+	ExperimentID   uuid.UUID `json:"experiment_id"`
+	ExperimentName string    `json:"experiment_name"`
+	PrimaryMetric  string    `json:"primary_metric"`
+	Variant        string    `json:"variant"`
+	SampleSize     int       `json:"sample_size"`
+	MetricValue    float64   `json:"metric_value"`
+	CILower        *float64  `json:"ci_lower,omitempty"`
+	CIUpper        *float64  `json:"ci_upper,omitempty"`
+	ComputedAt     time.Time `json:"computed_at"`
+}
+
+func (r *Repository) ABExperimentResults(ctx context.Context) ([]ABExperimentResult, error) {
+	var rows []ABExperimentResult
+	err := r.db.WithContext(ctx).Raw(`
+SELECT DISTINCT ON (r.experiment_id, r.variant)
+       r.experiment_id, e.name AS experiment_name, e.primary_metric, r.variant,
+       r.sample_size, r.metric_value, r.ci_lower, r.ci_upper, r.computed_at
+FROM ab_experiment_results r
+JOIN ab_experiments e ON e.id = r.experiment_id
+ORDER BY r.experiment_id, r.variant, r.computed_at DESC
+`).Scan(&rows).Error
+	return rows, err
+}
+
+type MLModel struct {
+	ID           uuid.UUID       `json:"id"`
+	ModelName    string          `json:"model_name"`
+	Version      string          `json:"version"`
+	Metrics      json.RawMessage `json:"metrics"`
+	ArtifactPath *string         `json:"artifact_path,omitempty"`
+	IsActive     bool            `json:"is_active"`
+	TrainedAt    time.Time       `json:"trained_at"`
+}
+
+func (r *Repository) ActiveMLModel(ctx context.Context, modelName string) (*MLModel, error) {
+	var m MLModel
+	err := r.db.WithContext(ctx).Raw(`
+SELECT id, model_name, version, metrics, artifact_path, is_active, trained_at
+FROM model_versions
+WHERE model_name = ? AND is_active = true
+ORDER BY trained_at DESC
+LIMIT 1
+`, modelName).Scan(&m).Error
+	if err != nil {
+		return nil, err
+	}
+	if m.ID == uuid.Nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &m, nil
+}
+
+func (r *Repository) ListMLModels(ctx context.Context) ([]MLModel, error) {
+	var rows []MLModel
+	err := r.db.WithContext(ctx).Raw(`
+SELECT id, model_name, version, metrics, artifact_path, is_active, trained_at
+FROM model_versions
+ORDER BY model_name ASC, trained_at DESC
+`).Scan(&rows).Error
+	return rows, err
 }

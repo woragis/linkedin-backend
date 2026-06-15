@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
@@ -35,4 +36,36 @@ func (s *Service) TopInfluencers(ctx context.Context, limit int) ([]graphrepo.Gr
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
 	return rows, nil
+}
+
+type LinkPredictionView struct {
+	UserID   uuid.UUID `json:"user_id"`
+	Slug     string    `json:"slug"`
+	FullName string    `json:"full_name"`
+	Headline string    `json:"headline"`
+	Score    float64   `json:"score"`
+	Reasons  []string  `json:"reasons"`
+}
+
+func (s *Service) LinkPredictions(ctx context.Context, viewerID uuid.UUID, limit int) ([]LinkPredictionView, error) {
+	rows, err := s.repo.LinkPredictions(ctx, viewerID, limit)
+	if err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	out := make([]LinkPredictionView, 0, len(rows))
+	for _, r := range rows {
+		var reasons []string
+		if r.Reasons != "" {
+			_ = json.Unmarshal([]byte(r.Reasons), &reasons)
+		}
+		out = append(out, LinkPredictionView{
+			UserID:   r.UserID,
+			Slug:     r.Slug,
+			FullName: r.FullName,
+			Headline: r.Headline,
+			Score:    r.Score,
+			Reasons:  reasons,
+		})
+	}
+	return out, nil
 }

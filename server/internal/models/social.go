@@ -8,27 +8,27 @@ import (
 )
 
 type Connection struct {
-	ID          uuid.UUID `gorm:"type:uuid;primaryKey"`
-	RequesterID uuid.UUID `gorm:"type:uuid;not null;index"`
-	AddresseeID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Status      string    `gorm:"not null;default:'pending'"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	RequesterID uuid.UUID `gorm:"type:uuid;not null;index" json:"requester_id"`
+	AddresseeID uuid.UUID `gorm:"type:uuid;not null;index" json:"addressee_id"`
+	Status      string    `gorm:"not null;default:'pending'" json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func (Connection) TableName() string { return "connections" }
 
 type Post struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	AuthorID  uuid.UUID  `gorm:"type:uuid;not null;index"`
-	Body      string     `gorm:"not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	AuthorID  uuid.UUID  `gorm:"type:uuid;not null;index" json:"author_id"`
+	Body      string     `gorm:"not null" json:"body"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 
-	Author   Profile    `gorm:"foreignKey:AuthorID;references:UserID"`
-	Reactions []Reaction `gorm:"foreignKey:PostID"`
-	Comments  []Comment  `gorm:"foreignKey:PostID"`
+	Author    Profile    `gorm:"foreignKey:AuthorID;references:UserID" json:"author,omitempty"`
+	Reactions []Reaction `gorm:"foreignKey:PostID" json:"-"`
+	Comments  []Comment  `gorm:"foreignKey:PostID" json:"-"`
 }
 
 func (Post) TableName() string { return "posts" }
@@ -43,15 +43,15 @@ type Reaction struct {
 func (Reaction) TableName() string { return "reactions" }
 
 type Comment struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	PostID    uuid.UUID  `gorm:"type:uuid;not null;index"`
-	AuthorID  uuid.UUID  `gorm:"type:uuid;not null"`
-	Body      string     `gorm:"not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	PostID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"post_id"`
+	AuthorID  uuid.UUID  `gorm:"type:uuid;not null" json:"author_id"`
+	Body      string     `gorm:"not null" json:"body"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 
-	Author Profile `gorm:"foreignKey:AuthorID;references:UserID"`
+	Author Profile `gorm:"foreignKey:AuthorID;references:UserID" json:"author,omitempty"`
 }
 
 func (Comment) TableName() string { return "comments" }

@@ -65,3 +65,16 @@ func (h *recommendationHandler) people(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+func (h *recommendationHandler) peopleMeta(w http.ResponseWriter, r *http.Request) {
+	userID := mustUser(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	out, err := h.reco.PeopleWithMeta(r.Context(), userID)
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

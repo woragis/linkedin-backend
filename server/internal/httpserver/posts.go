@@ -93,6 +93,20 @@ func (h *postHandler) comment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, out)
 }
 
+func (h *postHandler) listComments(w http.ResponseWriter, r *http.Request) {
+	postID, err := parseUUIDParam(r, "id")
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	out, err := h.posts.ListComments(r.Context(), postID)
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *postHandler) feed(w http.ResponseWriter, r *http.Request) {
 	userID := mustUser(w, r)
 	if userID == uuid.Nil {

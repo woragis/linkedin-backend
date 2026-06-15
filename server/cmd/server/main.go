@@ -108,11 +108,11 @@ func main() {
 	esClient := elasticsearch.New(strings.TrimSpace(os.Getenv("ELASTICSEARCH_URL")))
 	searchService := searchsvc.New(searchRepository, esClient)
 	recommendationRepository := recorepo.New(db)
-	recommendationService := recosvc.New(recommendationRepository)
+	recommendationService := recosvc.New(recommendationRepository, experimentRepository)
 	graphRepository := graphrepo.New(db)
 	graphService := graphsvc.New(graphRepository)
 	analyticsRepository := analyticsrepo.New(db)
-	analyticsService := analyticsvc.New(analyticsRepository)
+	analyticsService := analyticsvc.New(analyticsRepository, experimentRepository)
 	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository, connectionService, postService)
 
 	app := &httpserver.App{

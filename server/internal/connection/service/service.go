@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
@@ -104,12 +105,34 @@ func (s *Service) Reject(ctx context.Context, userID, connectionID uuid.UUID) (*
 	return c, nil
 }
 
-func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]models.Connection, error) {
-	rows, err := s.repo.ListAccepted(ctx, userID)
+type ConnectionView struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Slug        string    `json:"slug"`
+	FullName    string    `json:"full_name"`
+	Headline    string    `json:"headline"`
+	AvatarURL   *string   `json:"avatar_url"`
+	ConnectedAt time.Time `json:"connected_at"`
+}
+
+func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]ConnectionView, error) {
+	rows, err := s.repo.ListAcceptedWithPeers(ctx, userID)
 	if err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
-	return rows, nil
+	out := make([]ConnectionView, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ConnectionView{
+			ID:          r.ID,
+			UserID:      r.UserID,
+			Slug:        r.Slug,
+			FullName:    r.FullName,
+			Headline:    r.Headline,
+			AvatarURL:   r.AvatarURL,
+			ConnectedAt: r.ConnectedAt,
+		})
+	}
+	return out, nil
 }
 
 func (s *Service) ListPending(ctx context.Context, userID uuid.UUID) ([]models.Connection, error) {

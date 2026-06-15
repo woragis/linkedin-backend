@@ -41,6 +41,20 @@ func (h *graphHandler) influencers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (h *graphHandler) linkPredictions(w http.ResponseWriter, r *http.Request) {
+	userID := mustUser(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	out, err := h.graph.LinkPredictions(r.Context(), userID, limit)
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 type analyticsHandler struct {
 	analytics *analyticsvc.Service
 }
@@ -90,6 +104,24 @@ func (h *analyticsHandler) churn(w http.ResponseWriter, r *http.Request) {
 func (h *analyticsHandler) dau(w http.ResponseWriter, r *http.Request) {
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	out, err := h.analytics.DailyActive(r.Context(), days)
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *analyticsHandler) experiments(w http.ResponseWriter, r *http.Request) {
+	out, err := h.analytics.Experiments(r.Context())
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *analyticsHandler) mlModels(w http.ResponseWriter, r *http.Request) {
+	out, err := h.analytics.MLModels(r.Context())
 	if err != nil {
 		apperrors.WriteError(w, err)
 		return

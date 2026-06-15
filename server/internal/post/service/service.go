@@ -112,5 +112,21 @@ func (s *Service) Comment(ctx context.Context, userID, postID uuid.UUID, req Cre
 	if err := s.posts.AddComment(ctx, c); err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
+	rows, err := s.posts.ListComments(ctx, postID)
+	if err != nil {
+		return c, nil
+	}
+	for _, row := range rows {
+		if row.ID == c.ID {
+			return &row, nil
+		}
+	}
 	return c, nil
+}
+
+func (s *Service) ListComments(ctx context.Context, postID uuid.UUID) ([]models.Comment, error) {
+	if _, err := s.view(ctx, postID); err != nil {
+		return nil, err
+	}
+	return s.posts.ListComments(ctx, postID)
 }

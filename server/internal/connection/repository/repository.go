@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/unipe/linkedin/backend/server/internal/models"
@@ -75,6 +76,31 @@ func (r *Repository) ListPendingIncoming(ctx context.Context, userID uuid.UUID) 
 	err := r.db.WithContext(ctx).Where("status = ? AND addressee_id = ?", "pending", userID).
 		Order("created_at DESC").Find(&rows).Error
 	return rows, err
+}
+
+func (r *Repository) ListAcceptedWithPeers(ctx context.Context, userID uuid.UUID) ([]ConnectionPeer, error) {
+	var rows []ConnectionPeer
+	err := r.db.WithContext(ctx).Raw(`
+SELECT c.id,
+       p.user_id, p.slug, p.full_name, p.headline, p.avatar_url,
+       c.updated_at AS connected_at
+FROM connections c
+JOIN profiles p ON p.user_id = CASE
+  WHEN c.requester_id = ? THEN c.addressee_id ELSE c.requester_id END
+WHERE c.status = 'accepted' AND ? IN (c.requester_id, c.addressee_id)
+ORDER BY c.updated_at DESC
+`, userID, userID).Scan(&rows).Error
+	return rows, err
+}
+
+type ConnectionPeer struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id" gorm:"column:user_id"`
+	Slug        string    `json:"slug"`
+	FullName    string    `json:"full_name"`
+	Headline    string    `json:"headline"`
+	AvatarURL   *string   `json:"avatar_url"`
+	ConnectedAt time.Time `json:"connected_at" gorm:"column:connected_at"`
 }
 
 func (r *Repository) UserExists(ctx context.Context, id uuid.UUID) (bool, error) {

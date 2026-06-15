@@ -2,17 +2,21 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
 	analyticsrepo "github.com/unipe/linkedin/backend/server/internal/analytics/repository"
+	experimentrepo "github.com/unipe/linkedin/backend/server/internal/experiment/repository"
+	"gorm.io/gorm"
 )
 
 type Service struct {
-	repo *analyticsrepo.Repository
+	repo         *analyticsrepo.Repository
+	experimentRepo *experimentrepo.Repository
 }
 
-func New(repo *analyticsrepo.Repository) *Service {
-	return &Service{repo: repo}
+func New(repo *analyticsrepo.Repository, experimentRepo *experimentrepo.Repository) *Service {
+	return &Service{repo: repo, experimentRepo: experimentRepo}
 }
 
 func (s *Service) Overview(ctx context.Context) (*analyticsrepo.Overview, error) {
@@ -53,4 +57,31 @@ func (s *Service) DailyActive(ctx context.Context, days int) (any, error) {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
 	return rows, nil
+}
+
+func (s *Service) Experiments(ctx context.Context) ([]experimentrepo.ABExperimentResult, error) {
+	rows, err := s.experimentRepo.ABExperimentResults(ctx)
+	if err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	return rows, nil
+}
+
+func (s *Service) MLModels(ctx context.Context) ([]experimentrepo.MLModel, error) {
+	rows, err := s.experimentRepo.ListMLModels(ctx)
+	if err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	return rows, nil
+}
+
+func (s *Service) ActiveMLModel(ctx context.Context, modelName string) (*experimentrepo.MLModel, error) {
+	m, err := s.experimentRepo.ActiveMLModel(ctx, modelName)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	return m, nil
 }
