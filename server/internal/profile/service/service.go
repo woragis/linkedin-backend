@@ -10,6 +10,7 @@ import (
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
 	catalogrepo "github.com/unipe/linkedin/backend/server/internal/catalog/repository"
 	"github.com/unipe/linkedin/backend/server/internal/models"
+	"github.com/unipe/linkedin/backend/server/internal/platform/outbox"
 	profilerepo "github.com/unipe/linkedin/backend/server/internal/profile/repository"
 	"gorm.io/gorm"
 )
@@ -19,10 +20,11 @@ var slugFormat = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 type Service struct {
 	profiles *profilerepo.Repository
 	catalog  *catalogrepo.Repository
+	db       *gorm.DB
 }
 
-func New(profiles *profilerepo.Repository, catalog *catalogrepo.Repository) *Service {
-	return &Service{profiles: profiles, catalog: catalog}
+func New(profiles *profilerepo.Repository, catalog *catalogrepo.Repository, db *gorm.DB) *Service {
+	return &Service{profiles: profiles, catalog: catalog, db: db}
 }
 
 type ProfileView struct {
@@ -147,6 +149,10 @@ func (s *Service) PatchProfile(ctx context.Context, userID uuid.UUID, req PatchP
 	if _, err := s.profiles.UpdateProfile(ctx, userID, updates); err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
+	_ = outbox.Enqueue(ctx, s.db, outbox.Job{
+		JobType: "search.index_profile",
+		Payload: map[string]any{"user_id": userID.String()},
+	})
 	return s.GetMe(ctx, userID)
 }
 

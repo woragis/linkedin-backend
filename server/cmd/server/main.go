@@ -26,7 +26,12 @@ import (
 	postsvc "github.com/unipe/linkedin/backend/server/internal/post/service"
 	profilerepo "github.com/unipe/linkedin/backend/server/internal/profile/repository"
 	profilesvc "github.com/unipe/linkedin/backend/server/internal/profile/service"
+	recorepo "github.com/unipe/linkedin/backend/server/internal/recommendation/repository"
+	recosvc "github.com/unipe/linkedin/backend/server/internal/recommendation/service"
 	seedsvc "github.com/unipe/linkedin/backend/server/internal/seed/service"
+	searchrepo "github.com/unipe/linkedin/backend/server/internal/search/repository"
+	"github.com/unipe/linkedin/backend/server/internal/search/elasticsearch"
+	searchsvc "github.com/unipe/linkedin/backend/server/internal/search/service"
 )
 
 func main() {
@@ -85,10 +90,15 @@ func main() {
 	eventRepository := eventrepo.New(db)
 
 	authService := authsvc.New(authRepository, db, jwt)
-	profileService := profilesvc.New(profileRepository, catalogRepository)
+	profileService := profilesvc.New(profileRepository, catalogRepository, db)
 	connectionService := connsvc.New(connectionRepository, db)
 	postService := postsvc.New(postRepository, connectionRepository, db)
 	eventService := eventsvc.New(eventRepository)
+	searchRepository := searchrepo.New(db)
+	esClient := elasticsearch.New(strings.TrimSpace(os.Getenv("ELASTICSEARCH_URL")))
+	searchService := searchsvc.New(searchRepository, esClient)
+	recommendationRepository := recorepo.New(db)
+	recommendationService := recosvc.New(recommendationRepository)
 	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository, connectionService, postService)
 
 	app := &httpserver.App{
@@ -100,6 +110,8 @@ func main() {
 		Connections:       connectionService,
 		Posts:             postService,
 		Events:            eventService,
+		Search:            searchService,
+		Recommendations:   recommendationService,
 		Seed:              seedService,
 	}
 

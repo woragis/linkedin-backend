@@ -67,6 +67,17 @@ func Mount(mux *http.ServeMux, app *App) {
 		mux.Handle("GET /v1/feed", require(http.HandlerFunc(po.feed)))
 	}
 
+	if app.Search != nil {
+		sh := newSearchHandler(app.Search)
+		mux.HandleFunc("GET /v1/search/people", sh.people)
+		mux.HandleFunc("GET /v1/search/posts", sh.posts)
+	}
+
+	if app.Recommendations != nil {
+		rh := newRecommendationHandler(app.Recommendations)
+		mux.Handle("GET /v1/recommendations/people", require(http.HandlerFunc(rh.people)))
+	}
+
 	if app.Seed != nil {
 		ih := newInternalHandler(app.InternalJobSecret, app.Seed)
 		mux.HandleFunc("POST /v1/internal/seed-demo", ih.seedDemo)
