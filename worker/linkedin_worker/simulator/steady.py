@@ -19,12 +19,11 @@ from linkedin_worker.simulator.actions.reactions import like_post
 from linkedin_worker.simulator.agent import Agent
 from linkedin_worker.simulator.content.templates import pick_post_body
 from linkedin_worker.simulator.db import (
-    load_agents,
+    batch_update_markov_states,
+    load_global_recent_posts,
     pending_requester_for_addressee,
-    sample_recent_posts,
-    update_markov_state,
 )
-from linkedin_worker.simulator.markov import MarkovStep, step as markov_step
+from linkedin_worker.simulator.markov import step as markov_step
 from linkedin_worker.simulator.scoring import pick_target
 
 log = logging.getLogger("linkedin-worker.simulator.steady")
@@ -47,15 +46,16 @@ def run_tick(
     batch_size = min(settings.SIMULATOR_BATCH_SIZE, len(agents))
     batch = rng.sample(agents, batch_size)
     counts: Counter[str] = Counter()
-    posts_cache: dict[UUID, list[tuple[UUID, UUID]]] = {}
+    markov_updates: list[tuple[str, UUID]] = []
+    global_posts = load_global_recent_posts(conn, limit=settings.SIMULATOR_GLOBAL_POSTS_POOL)
 
     for agent in batch:
         pending = pending_requester_for_addressee(conn, agent.user_id)
         if pending and rng.random() < 0.20 + 0.25 * agent.extraversion:
             if accept_connection(conn, agent.user_id, pending):
                 counts["accept"] += 1
-                update_markov_state(conn, agent.user_id, "browsing")
                 agent.markov_state = "browsing"
+                markov_updates.append(("browsing", agent.user_id))
             continue
 
         result = markov_step(agent, hour, rng)
@@ -64,17 +64,24 @@ def run_tick(
             counts["session"] += 1
 
         agent.markov_state = result.state
-        update_markov_state(conn, agent.user_id, result.state)
+        markov_updates.append((result.state, agent.user_id))
 
         if not result.action:
             continue
 
         topic = archetypes.ARCHETYPES.get(agent.archetype, {}).get("template_topic", "tech")
-        if _execute_action(conn, agent, agents, rng, result.action, topic, posts_cache, counts):
-            pass
+        _execute_action(conn, agent, agents, rng, result.action, topic, global_posts, counts)
 
+    batch_update_markov_states(conn, markov_updates)
     conn.commit()
     return sum(counts.values()), counts
+
+
+def _posts_for_agent(
+    global_posts: list[tuple[UUID, UUID]],
+    agent_id: UUID,
+) -> list[tuple[UUID, UUID]]:
+    return [(post_id, author_id) for post_id, author_id in global_posts if author_id != agent_id]
 
 
 def _execute_action(
@@ -84,7 +91,7 @@ def _execute_action(
     rng: random.Random,
     action: str,
     topic: str,
-    posts_cache: dict[UUID, list[tuple[UUID, UUID]]],
+    global_posts: list[tuple[UUID, UUID]],
     counts: Counter[str],
 ) -> bool:
     if action == "post":
@@ -103,9 +110,7 @@ def _execute_action(
             return True
         return False
 
-    if agent.user_id not in posts_cache:
-        posts_cache[agent.user_id] = sample_recent_posts(conn, agent.user_id)
-    posts = posts_cache[agent.user_id]
+    posts = _posts_for_agent(global_posts, agent.user_id)
     if not posts:
         body = pick_post_body(rng, topic)
         create_post(conn, agent.user_id, body)

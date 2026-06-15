@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 
+from linkedin_worker import settings
 from linkedin_worker.simulator.content.templates import pick_post_body
 from linkedin_worker.simulator.db import enqueue_outbox, insert_event
 
@@ -14,7 +15,7 @@ def create_post(
     user_id: UUID,
     body: str,
     *,
-    enqueue_search: bool = True,
+    enqueue_search: bool | None = None,
 ) -> UUID:
     post_id = uuid4()
     conn.execute(
@@ -25,7 +26,7 @@ def create_post(
         (post_id, user_id, body),
     )
     insert_event(conn, user_id, "post_created", {"post_id": str(post_id)})
-    if enqueue_search:
+    if settings.SIMULATOR_ENQUEUE_SEARCH if enqueue_search is None else enqueue_search:
         enqueue_outbox(conn, "search.index_post", {"post_id": str(post_id)})
     return post_id
 

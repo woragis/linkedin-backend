@@ -185,3 +185,30 @@ def update_markov_state(conn: psycopg.Connection, user_id: UUID, state: str) -> 
         (state, user_id),
     )
 
+
+def batch_update_markov_states(conn: psycopg.Connection, updates: list[tuple[str, UUID]]) -> None:
+    if not updates:
+        return
+    conn.cursor().executemany(
+        "UPDATE simulator_agents SET markov_state = %s WHERE user_id = %s",
+        updates,
+    )
+
+
+def load_global_recent_posts(
+    conn: psycopg.Connection,
+    *,
+    limit: int = 200,
+) -> list[tuple[UUID, UUID]]:
+    rows = conn.execute(
+        """
+        SELECT id, author_id
+        FROM posts
+        WHERE deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        (limit,),
+    ).fetchall()
+    return [(row[0], row[1]) for row in rows]
+

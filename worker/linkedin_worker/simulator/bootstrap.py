@@ -13,11 +13,10 @@ import psycopg
 from linkedin_worker import settings
 from linkedin_worker.simulator import archetypes, demographics
 from linkedin_worker.simulator.actions.posts import create_bootstrap_post, session_start
+from linkedin_worker.simulator.bootstrap_cache import CatalogCache
 from linkedin_worker.simulator.db import (
     PASSWORD_PLAIN,
     count_simulator_agents,
-    ensure_catalog_entity,
-    ensure_skill,
     enqueue_outbox,
     insert_event,
     load_existing_slugs,
@@ -52,20 +51,23 @@ def bootstrap_agents(conn: psycopg.Connection) -> int:
     rng = random.Random(settings.SIMULATOR_SEED + existing)
     taken_slugs = load_existing_slugs(conn)
     pwd_hash = password_hash()
+    catalog = CatalogCache()
+    commit_every = max(1, settings.SIMULATOR_BOOTSTRAP_COMMIT_EVERY)
     created = 0
-    writes_since_outbox = 0
 
-    log.info("bootstrap starting remaining=%s target=%s", remaining, target)
+    log.info(
+        "bootstrap starting remaining=%s target=%s commit_every=%s enqueue_search=%s",
+        remaining,
+        target,
+        commit_every,
+        settings.SIMULATOR_ENQUEUE_SEARCH,
+    )
 
     for index in range(remaining):
-        _create_agent(conn, rng, taken_slugs, pwd_hash, existing + index)
+        _create_agent(conn, rng, taken_slugs, pwd_hash, catalog, existing + index)
         created += 1
-        writes_since_outbox += 1
 
-        if writes_since_outbox >= settings.SIMULATOR_OUTBOX_EVERY:
-            conn.commit()
-            writes_since_outbox = 0
-        elif created % 100 == 0:
+        if created % commit_every == 0:
             conn.commit()
             log.info("bootstrap progress created=%s/%s", created, remaining)
 
@@ -79,6 +81,7 @@ def _create_agent(
     rng: random.Random,
     taken_slugs: set[str],
     pwd_hash: str,
+    catalog: CatalogCache,
     rng_offset: int,
 ) -> None:
     archetype = archetypes.pick_archetype(rng)
@@ -96,14 +99,10 @@ def _create_agent(
     taken_slugs.add(slug)
 
     email = f"sim-{user_id}@sim.local"
-    location = city.name
     headline = profile["headline"]
 
     conn.execute(
-        """
-        INSERT INTO users (id, email, password_hash)
-        VALUES (%s, %s, %s)
-        """,
+        "INSERT INTO users (id, email, password_hash) VALUES (%s, %s, %s)",
         (user_id, email, pwd_hash),
     )
     conn.execute(
@@ -111,7 +110,7 @@ def _create_agent(
         INSERT INTO profiles (user_id, slug, full_name, headline, location, birth_year)
         VALUES (%s, %s, %s, %s, %s, %s)
         """,
-        (user_id, slug, full_name, headline, location, birth_year),
+        (user_id, slug, full_name, headline, city.name, birth_year),
     )
     conn.execute(
         """
@@ -136,8 +135,7 @@ def _create_agent(
         ),
     )
 
-    school_slug = _slugify(profile["school"])
-    institution_id = ensure_catalog_entity(conn, "institutions", profile["school"], school_slug)
+    institution_id = catalog.institution(conn, profile["school"], _slugify(profile["school"]))
     conn.execute(
         """
         INSERT INTO educations (user_id, institution_id, field_of_study, degree, start_year, end_year)
@@ -146,8 +144,7 @@ def _create_agent(
         (user_id, institution_id, "Ciência da Computação", "Bacharelado", birth_year + 18, birth_year + 22),
     )
 
-    company_slug = _slugify(profile["company"])
-    company_id = ensure_catalog_entity(conn, "companies", profile["company"], company_slug)
+    company_id = catalog.company(conn, profile["company"], _slugify(profile["company"]))
     conn.execute(
         """
         INSERT INTO experiences (user_id, company_id, title, start_year, is_current)
@@ -157,19 +154,15 @@ def _create_agent(
     )
 
     for skill_name in profile["skills"]:
-        skill_slug = _slugify(skill_name)
-        skill_id = ensure_skill(conn, skill_name, skill_slug)
+        skill_id = catalog.skill(conn, skill_name, _slugify(skill_name))
         conn.execute(
-            """
-            INSERT INTO user_skills (user_id, skill_id)
-            VALUES (%s, %s)
-            ON CONFLICT DO NOTHING
-            """,
+            "INSERT INTO user_skills (user_id, skill_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (user_id, skill_id),
         )
 
     session_start(conn, user_id)
     post_id = create_bootstrap_post(conn, user_id, rng, profile["template_topic"])
-    enqueue_outbox(conn, "search.index_profile", {"user_id": str(user_id)})
-    enqueue_outbox(conn, "search.index_post", {"post_id": str(post_id)})
+    if settings.SIMULATOR_ENQUEUE_SEARCH:
+        enqueue_outbox(conn, "search.index_profile", {"user_id": str(user_id)})
+        enqueue_outbox(conn, "search.index_post", {"post_id": str(post_id)})
     insert_event(conn, user_id, "profile_created", {"slug": slug, "source": "simulator"})
