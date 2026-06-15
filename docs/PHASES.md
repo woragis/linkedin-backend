@@ -161,3 +161,11 @@ Cada item = 1 commit quando possível.
 16. `ml: connection acceptance model`
 17. `ab: feed experiment framework`
 18. `scale: prometheus redis cache kafka benchmark`
+
+---
+
+## Próximas etapas
+
+Fases 0–7 concluídas. Evolução planejada em [**ROADMAP.md**](ROADMAP.md) (consolidação, simulador, ciência de dados, escala).
+
+Simulador sintético: [**SIMULATOR.md**](SIMULATOR.md).

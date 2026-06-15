@@ -38,11 +38,20 @@ Frontend (repositório separado): `../frontend` — `npm run dev` em `http://127
 
 ## Documentação
 
-- [Plano de fases](docs/PHASES.md)
+- [Plano de fases 0–7](docs/PHASES.md) — concluído
+- [**Roadmap curto/médio/longo prazo**](docs/ROADMAP.md)
+- [**Especificação do simulador**](docs/SIMULATOR.md) — psycopg, arquétipos, Markov
 - [Arquitetura](docs/ARCHITECTURE.md)
 - [Workers](docs/WORKERS.md)
 - [Modelo de dados](docs/DATA_MODEL.md)
 - [API planejada](docs/API.md)
+
+## Testes
+
+```bash
+make test        # unit + integration + e2e + pytest
+make test-unit   # só Go unit
+```
 
 ## Princípios
 

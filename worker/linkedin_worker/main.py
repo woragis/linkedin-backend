@@ -1,4 +1,4 @@
-"""Worker entrypoint — roles: realtime, batch, all."""
+"""Worker entrypoint — roles: realtime, batch, all, simulator."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from linkedin_worker import settings
 from linkedin_worker.queue.consumer import consume_loop
 from linkedin_worker.queue.relay import relay_loop
 from linkedin_worker.scheduler import batch as batch_scheduler
+from linkedin_worker.simulator import run_simulator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("linkedin-worker")
@@ -56,6 +57,8 @@ def main() -> None:
         batch_thread = threading.Thread(target=run_batch, daemon=True)
         batch_thread.start()
         run_realtime()
+    elif role == "simulator":
+        run_simulator()
     else:
         raise SystemExit(f"unknown WORKER_ROLE: {role}")
 
