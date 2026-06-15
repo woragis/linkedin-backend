@@ -14,6 +14,7 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  es_data:
 
 services:
   postgres:
@@ -48,6 +49,23 @@ services:
       timeout: 3s
       retries: 10
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   api:
     build:
       context: .
@@ -65,6 +83,7 @@ services:
       SKIP_SQL_MIGRATIONS: ${SKIP_SQL_MIGRATIONS:-0}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-1}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
     networks:
       - internal
     ports:
@@ -73,6 +92,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -93,7 +114,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
       OUTBOX_POLL_INTERVAL_SEC: ${OUTBOX_POLL_INTERVAL_SEC:-2}
-      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
     networks:
       - internal
     depends_on:
@@ -116,7 +137,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
-      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
     networks:
       - internal
     depends_on:
@@ -142,7 +163,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
       BATCH_ENABLED: ${BATCH_ENABLED:-1}
-      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
     networks:
       - internal
     depends_on:
