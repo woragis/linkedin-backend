@@ -1,0 +1,11 @@
+# Railway service: worker-batch (Worker)
+# Config file path: deploy/railway/worker-batch/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "deploy/railway/worker-batch/Dockerfile"
+watchPatterns = ["worker/**", "deploy/railway/worker-batch/**"]
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ALWAYS"

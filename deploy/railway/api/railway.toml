@@ -1,0 +1,12 @@
+# Railway service: api (Web)
+# Settings → Root Directory: (empty / repo root)
+# Settings → Config file path: deploy/railway/api/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "server/Dockerfile"
+watchPatterns = ["server/**", "migrations/**"]
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ALWAYS"

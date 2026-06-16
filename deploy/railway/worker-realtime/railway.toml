@@ -1,0 +1,12 @@
+# Railway service: worker-realtime (Worker — not Web)
+# Settings → Root Directory: (empty / repo root)
+# Settings → Config file path: deploy/railway/worker-realtime/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "deploy/railway/worker-realtime/Dockerfile"
+watchPatterns = ["worker/**", "deploy/railway/worker-realtime/**"]
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ALWAYS"
