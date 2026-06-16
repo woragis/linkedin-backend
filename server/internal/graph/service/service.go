@@ -27,6 +27,12 @@ func (s *Service) UserGraph(ctx context.Context, userID uuid.UUID) (*GraphView, 
 	if err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
+	if nodes == nil {
+		nodes = []graphrepo.GraphNode{}
+	}
+	if edges == nil {
+		edges = []graphrepo.GraphEdge{}
+	}
 	return &GraphView{Nodes: nodes, Edges: edges}, nil
 }
 
@@ -34,6 +40,9 @@ func (s *Service) TopInfluencers(ctx context.Context, limit int) ([]graphrepo.Gr
 	rows, err := s.repo.TopInfluencers(ctx, limit)
 	if err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	if rows == nil {
+		rows = []graphrepo.GraphNode{}
 	}
 	return rows, nil
 }
