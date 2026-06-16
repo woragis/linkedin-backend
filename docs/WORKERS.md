@@ -1,6 +1,20 @@
 # Workers
 
-Um pacote Python (`linkedin_worker/`), múltiplos **papéis lógicos**, **dois containers** em produção.
+Um pacote Python (`linkedin_worker/`), **microserviços por `WORKER_ROLE`**, mesma imagem Docker.
+
+## Papéis (produção)
+
+| `WORKER_ROLE` | Tipo | Responsabilidade |
+|---|---|---|
+| `realtime` | fila + relay | outbox → Redis, eventos, notificações |
+| `indexer` | fila | indexação Elasticsearch |
+| `graph` | cron + fila | PageRank/comunidades; recompute por usuário |
+| `ml` | cron | treino scikit-learn |
+| `batch` | cron | recommendations, feed, churn, rollup |
+| `simulator` | loop | população sintética (produção acadêmica) |
+| `all` | tudo | dev local apenas |
+
+Deploy: [DEPLOY-RAILWAY.md](DEPLOY-RAILWAY.md)
 
 ## Catálogo
 
@@ -69,7 +83,7 @@ Output: `user_connection_suggestions(viewer, suggested, score, reasons JSONB)`.
 
 | Variável | Default | Descrição |
 |---|---|---|
-| `WORKER_ROLE` | `all` | `realtime`, `batch`, `all` |
+| `WORKER_ROLE` | `all` | `realtime`, `indexer`, `graph`, `ml`, `batch`, `simulator` |
 | `DATABASE_URL` | — | Postgres |
 | `REDIS_URL` | `redis://redis:6379/0` | Fila |
 | `REDIS_QUEUE_KEY` | `linkedin:jobs` | Lista de jobs |

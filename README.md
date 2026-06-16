@@ -39,6 +39,7 @@ Frontend (repositório separado): `../frontend` — `npm run dev` em `http://127
 ## Documentação
 
 - [Plano de fases 0–7](docs/PHASES.md) — concluído
+- [**Deploy Railway**](docs/DEPLOY-RAILWAY.md) — micro-workers + simulador em produção
 - [**Roadmap curto/médio/longo prazo**](docs/ROADMAP.md)
 - [**Especificação do simulador**](docs/SIMULATOR.md) — psycopg, arquétipos, Markov
 - [Arquitetura](docs/ARCHITECTURE.md)

@@ -11,6 +11,7 @@ import psycopg
 import redis
 
 from linkedin_worker import settings
+from linkedin_worker.queue.routing import queue_for_job
 
 log = logging.getLogger("linkedin-worker.relay")
 
@@ -56,7 +57,11 @@ def _kafka_producer():
 
 def _publish(r: redis.Redis, job_type: str, payload: dict[str, Any]) -> None:
     body = {"type": job_type, "payload": payload}
-    r.lpush(settings.REDIS_QUEUE_KEY, json.dumps(body))
+    queue = queue_for_job(job_type)
+    r.lpush(queue, json.dumps(body))
+    # Legacy single-queue consumers (WORKER_ROLE=all)
+    if queue != settings.REDIS_QUEUE_KEY:
+        r.lpush(settings.REDIS_QUEUE_KEY, json.dumps(body))
     producer = _kafka_producer()
     if producer is not None:
         producer.send(settings.KAFKA_TOPIC, body)

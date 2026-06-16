@@ -85,11 +85,25 @@ Sistemas separados que se encontram na UI:
 
 | Container | `WORKER_ROLE` | Jobs |
 |---|---|---|
-| `worker-realtime` | `realtime` | indexer, events-processor, notifications, outbox relay |
-| `worker-batch` | `batch` | graph, recommendations, feed-ranking, churn, analytics-rollup, ml-training |
+| `worker-realtime` | `realtime` | outbox relay, events, notifications |
+| `worker-indexer` | `indexer` | `search.index_profile`, `search.index_post` |
+| `worker-graph` | `graph` | cron PageRank; `graph.recompute_user` |
+| `worker-ml` | `ml` | cron `ml_training` (scikit-learn) |
+| `worker-batch` | `batch` | recommendations, feed-ranking, churn, analytics-rollup |
+| `worker-simulator` | `simulator` | população sintética (produção acadêmica) |
 | `worker-all` | `all` | tudo (dev local) |
 
-Mesma imagem Docker, papéis diferentes via env.
+Mesma imagem Docker (`WORKER_DEPS` build-arg), papéis e filas diferentes via env.
+
+### Filas Redis
+
+| Fila | Jobs |
+|---|---|
+| `linkedin:jobs:realtime` | `analytics.process_event`, `notifications.send` |
+| `linkedin:jobs:indexer` | `search.index_*` |
+| `linkedin:jobs:graph` | `graph.recompute_user` |
+
+O outbox relay publica na fila correta por `job_type`. Ver [DEPLOY-RAILWAY.md](DEPLOY-RAILWAY.md).
 
 ## Kafka (fase 7+)
 

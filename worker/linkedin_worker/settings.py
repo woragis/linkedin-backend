@@ -6,8 +6,13 @@ DATABASE_URL = os.getenv(
 )
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 REDIS_QUEUE_KEY = os.getenv("REDIS_QUEUE_KEY", "linkedin:jobs")
+REDIS_QUEUE_REALTIME = os.getenv("REDIS_QUEUE_REALTIME", REDIS_QUEUE_KEY)
+REDIS_QUEUE_INDEXER = os.getenv("REDIS_QUEUE_INDEXER", "linkedin:jobs:indexer")
+REDIS_QUEUE_GRAPH = os.getenv("REDIS_QUEUE_GRAPH", "linkedin:jobs:graph")
 
 WORKER_ROLE = os.getenv("WORKER_ROLE", "all").strip().lower()
+WORKER_HEALTH_ENABLED = os.getenv("WORKER_HEALTH_ENABLED", "1").lower() in ("1", "true", "yes")
+WORKER_HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", os.getenv("PORT", "8081")))
 OUTBOX_POLL_INTERVAL_SEC = float(os.getenv("OUTBOX_POLL_INTERVAL_SEC", "2"))
 BATCH_ENABLED = os.getenv("BATCH_ENABLED", "1").lower() in ("1", "true", "yes")
 

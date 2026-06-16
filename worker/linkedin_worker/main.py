@@ -1,4 +1,4 @@
-"""Worker entrypoint — roles: realtime, batch, all, simulator."""
+"""Worker entrypoint — microservice roles via WORKER_ROLE."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import psycopg
 import redis
 
 from linkedin_worker import settings
+from linkedin_worker.health import start_health_server
 from linkedin_worker.queue.consumer import consume_loop
 from linkedin_worker.queue.relay import relay_loop
 from linkedin_worker.scheduler import batch as batch_scheduler
@@ -16,6 +17,16 @@ from linkedin_worker.simulator import run_simulator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("linkedin-worker")
+
+VALID_ROLES = frozenset({
+    "realtime",
+    "indexer",
+    "graph",
+    "ml",
+    "batch",
+    "simulator",
+    "all",  # dev only
+})
 
 
 def _connect_db() -> psycopg.Connection:
@@ -33,7 +44,39 @@ def run_realtime() -> None:
 
     relay_thread = threading.Thread(target=relay_loop, args=(relay_conn, r), daemon=True)
     relay_thread.start()
-    consume_loop(r, consumer_conn)
+    consume_loop(r, consumer_conn, role="realtime")
+
+
+def run_indexer() -> None:
+    conn = _connect_db()
+    r = _connect_redis()
+    consume_loop(r, conn, role="indexer")
+
+
+def run_graph() -> None:
+    r = _connect_redis()
+    consumer_conn = _connect_db()
+
+    if settings.BATCH_ENABLED:
+        sched_conn = _connect_db()
+        threading.Thread(
+            target=consume_loop,
+            args=(r, consumer_conn),
+            kwargs={"role": "graph"},
+            daemon=True,
+        ).start()
+        batch_scheduler.start_graph(sched_conn)
+    else:
+        consume_loop(r, consumer_conn, role="graph")
+
+
+def run_ml() -> None:
+    conn = _connect_db()
+    if not settings.BATCH_ENABLED:
+        log.info("ml disabled; sleeping")
+        threading.Event().wait()
+        return
+    batch_scheduler.start_ml(conn)
 
 
 def run_batch() -> None:
@@ -42,25 +85,47 @@ def run_batch() -> None:
         log.info("batch disabled; sleeping")
         threading.Event().wait()
         return
-    batch_scheduler.start(conn)
+    batch_scheduler.start_batch(conn)
+
+
+def run_all() -> None:
+    """Dev: relay + all queues + all crons in one container."""
+    relay_conn = _connect_db()
+    consumer_conn = _connect_db()
+    r = _connect_redis()
+
+    batch_thread = threading.Thread(target=run_batch_legacy, daemon=True)
+    batch_thread.start()
+
+    relay_thread = threading.Thread(target=relay_loop, args=(relay_conn, r), daemon=True)
+    relay_thread.start()
+    consume_loop(r, consumer_conn, role="all")
+
+
+def run_batch_legacy() -> None:
+    conn = _connect_db()
+    if settings.BATCH_ENABLED:
+        batch_scheduler.start_all(conn)
 
 
 def main() -> None:
     role = settings.WORKER_ROLE
-    log.info("worker starting role=%s", role)
+    if role not in VALID_ROLES:
+        raise SystemExit(f"unknown WORKER_ROLE: {role!r}; valid: {sorted(VALID_ROLES)}")
 
-    if role == "realtime":
-        run_realtime()
-    elif role == "batch":
-        run_batch()
-    elif role == "all":
-        batch_thread = threading.Thread(target=run_batch, daemon=True)
-        batch_thread.start()
-        run_realtime()
-    elif role == "simulator":
-        run_simulator()
-    else:
-        raise SystemExit(f"unknown WORKER_ROLE: {role}")
+    log.info("worker starting role=%s", role)
+    start_health_server(role)
+
+    runners = {
+        "realtime": run_realtime,
+        "indexer": run_indexer,
+        "graph": run_graph,
+        "ml": run_ml,
+        "batch": run_batch,
+        "simulator": run_simulator,
+        "all": run_all,
+    }
+    runners[role]()
 
 
 if __name__ == "__main__":

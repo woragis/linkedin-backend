@@ -106,14 +106,44 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: base
     restart: unless-stopped
     env_file: .env
     environment:
       WORKER_ROLE: realtime
+      WORKER_HEALTH_PORT: 8081
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
+      REDIS_QUEUE_REALTIME: ${REDIS_QUEUE_REALTIME:-linkedin:jobs:realtime}
+      REDIS_QUEUE_INDEXER: ${REDIS_QUEUE_INDEXER:-linkedin:jobs:indexer}
+      REDIS_QUEUE_GRAPH: ${REDIS_QUEUE_GRAPH:-linkedin:jobs:graph}
       OUTBOX_POLL_INTERVAL_SEC: ${OUTBOX_POLL_INTERVAL_SEC:-2}
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  worker-indexer:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: base
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: indexer
+      WORKER_HEALTH_PORT: 8082
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_INDEXER: ${REDIS_QUEUE_INDEXER:-linkedin:jobs:indexer}
       ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
     networks:
       - internal
@@ -121,6 +151,54 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  worker-graph:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: base
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: graph
+      WORKER_HEALTH_PORT: 8083
+      BATCH_ENABLED: ${BATCH_ENABLED:-1}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_GRAPH: ${REDIS_QUEUE_GRAPH:-linkedin:jobs:graph}
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  worker-ml:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: ml
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ROLE: ml
+      WORKER_HEALTH_PORT: 8084
+      BATCH_ENABLED: ${BATCH_ENABLED:-1}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+    networks:
+      - internal
+    depends_on:
+      postgres:
         condition: service_healthy
       api:
         condition: service_healthy
@@ -129,15 +207,16 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: base
     restart: unless-stopped
     env_file: .env
     environment:
       WORKER_ROLE: batch
+      WORKER_HEALTH_PORT: 8085
       BATCH_ENABLED: ${BATCH_ENABLED:-1}
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
-      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
     networks:
       - internal
     depends_on:
@@ -148,26 +227,25 @@ services:
       api:
         condition: service_healthy
 
-  # Synthetic population (psycopg direct writes)
-  # docker compose --profile sim up worker-simulator          # 2k agents
-  # docker compose --profile sim-small up worker-simulator-small
-  # docker compose --profile sim-large up worker-simulator-large  # 10k agents
+  # Synthetic population — produção acadêmica (estudo de redes)
   worker-simulator:
-    profiles: ["sim"]
+    profiles: ["sim", "prod"]
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: simulator
     restart: unless-stopped
     env_file: .env
     environment:
       WORKER_ROLE: simulator
+      WORKER_HEALTH_PORT: 8086
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
       SIMULATOR_AGENT_COUNT: ${SIMULATOR_AGENT_COUNT:-2000}
       SIMULATOR_SEED: ${SIMULATOR_SEED:-42}
       SIMULATOR_TICK_SEC: ${SIMULATOR_TICK_SEC:-1}
       SIMULATOR_PHASE: ${SIMULATOR_PHASE:-auto}
       SIMULATOR_BATCH_SIZE: ${SIMULATOR_BATCH_SIZE:-50}
-      SIMULATOR_OUTBOX_EVERY: ${SIMULATOR_OUTBOX_EVERY:-100}
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-1}
       SIMULATOR_TIMEZONE: ${SIMULATOR_TIMEZONE:-America/Recife}
       SIMULATOR_BOOTSTRAP_COMMIT_EVERY: ${SIMULATOR_BOOTSTRAP_COMMIT_EVERY:-100}
@@ -185,11 +263,14 @@ services:
       api:
         condition: service_healthy
 
+  # Legacy aliases (profiles) — prefer split workers above
   worker-simulator-small:
     profiles: ["sim-small"]
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: simulator
     restart: unless-stopped
     env_file: .env
     environment:
@@ -216,6 +297,8 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: simulator
     restart: unless-stopped
     env_file: .env
     environment:
@@ -247,6 +330,8 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        WORKER_DEPS: dev
     restart: unless-stopped
     env_file: .env
     environment:

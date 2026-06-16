@@ -1,4 +1,4 @@
-"""APScheduler cron jobs for worker-batch."""
+"""Cron schedulers split by worker role."""
 
 from __future__ import annotations
 
@@ -20,21 +20,41 @@ from linkedin_worker.jobs import (
 log = logging.getLogger("linkedin-worker.scheduler")
 
 
-def start(conn: psycopg.Connection) -> None:
+def start_graph(conn: psycopg.Connection) -> None:
     sched = BlockingScheduler()
-
     sched.add_job(
         graph.run_batch,
         "cron",
-        ** _cron_kwargs(settings.BATCH_CRON_GRAPH),
+        **_cron_kwargs(settings.BATCH_CRON_GRAPH),
         args=[conn],
         id="graph",
         replace_existing=True,
     )
+    log.info("graph scheduler started")
+    sched.start()
+
+
+def start_ml(conn: psycopg.Connection) -> None:
+    sched = BlockingScheduler()
+    sched.add_job(
+        ml_training.run_batch,
+        "cron",
+        **_cron_kwargs(settings.BATCH_CRON_ML_TRAINING),
+        args=[conn],
+        id="ml_training",
+        replace_existing=True,
+    )
+    log.info("ml scheduler started")
+    sched.start()
+
+
+def start_batch(conn: psycopg.Connection) -> None:
+    """Core batch: recommendations, feed, churn, analytics (no graph / ml)."""
+    sched = BlockingScheduler()
     sched.add_job(
         recommendations.run_batch,
         "cron",
-        ** _cron_kwargs(settings.BATCH_CRON_RECOMMENDATIONS),
+        **_cron_kwargs(settings.BATCH_CRON_RECOMMENDATIONS),
         args=[conn],
         id="recommendations",
         replace_existing=True,
@@ -42,7 +62,7 @@ def start(conn: psycopg.Connection) -> None:
     sched.add_job(
         feed_ranking.run_batch,
         "cron",
-        ** _cron_kwargs(settings.BATCH_CRON_FEED_RANKING),
+        **_cron_kwargs(settings.BATCH_CRON_FEED_RANKING),
         args=[conn],
         id="feed_ranking",
         replace_existing=True,
@@ -50,7 +70,7 @@ def start(conn: psycopg.Connection) -> None:
     sched.add_job(
         churn.run_batch,
         "cron",
-        ** _cron_kwargs(settings.BATCH_CRON_CHURN),
+        **_cron_kwargs(settings.BATCH_CRON_CHURN),
         args=[conn],
         id="churn",
         replace_existing=True,
@@ -58,7 +78,54 @@ def start(conn: psycopg.Connection) -> None:
     sched.add_job(
         analytics_rollup.run_batch,
         "cron",
-        ** _cron_kwargs(settings.BATCH_CRON_ANALYTICS),
+        **_cron_kwargs(settings.BATCH_CRON_ANALYTICS),
+        args=[conn],
+        id="analytics_rollup",
+        replace_existing=True,
+    )
+    log.info("batch scheduler started")
+    sched.start()
+
+
+def start_all(conn: psycopg.Connection) -> None:
+    """Legacy WORKER_ROLE=batch — all cron jobs in one process."""
+    sched = BlockingScheduler()
+    sched.add_job(
+        graph.run_batch,
+        "cron",
+        **_cron_kwargs(settings.BATCH_CRON_GRAPH),
+        args=[conn],
+        id="graph",
+        replace_existing=True,
+    )
+    sched.add_job(
+        recommendations.run_batch,
+        "cron",
+        **_cron_kwargs(settings.BATCH_CRON_RECOMMENDATIONS),
+        args=[conn],
+        id="recommendations",
+        replace_existing=True,
+    )
+    sched.add_job(
+        feed_ranking.run_batch,
+        "cron",
+        **_cron_kwargs(settings.BATCH_CRON_FEED_RANKING),
+        args=[conn],
+        id="feed_ranking",
+        replace_existing=True,
+    )
+    sched.add_job(
+        churn.run_batch,
+        "cron",
+        **_cron_kwargs(settings.BATCH_CRON_CHURN),
+        args=[conn],
+        id="churn",
+        replace_existing=True,
+    )
+    sched.add_job(
+        analytics_rollup.run_batch,
+        "cron",
+        **_cron_kwargs(settings.BATCH_CRON_ANALYTICS),
         args=[conn],
         id="analytics_rollup",
         replace_existing=True,
@@ -66,13 +133,12 @@ def start(conn: psycopg.Connection) -> None:
     sched.add_job(
         ml_training.run_batch,
         "cron",
-        ** _cron_kwargs(settings.BATCH_CRON_ML_TRAINING),
+        **_cron_kwargs(settings.BATCH_CRON_ML_TRAINING),
         args=[conn],
         id="ml_training",
         replace_existing=True,
     )
-
-    log.info("batch scheduler started")
+    log.info("batch scheduler (all crons) started")
     sched.start()
 
 
