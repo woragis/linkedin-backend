@@ -6,7 +6,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "deploy/railway/worker-batch/Dockerfile"
 watchPatterns = ["worker/**", "deploy/railway/worker-batch/**"]
 
+[build.args]
+WORKER_DEPS = "base"
+WORKER_ROLE = "batch"
+
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckPath = ""
 restartPolicyType = "ALWAYS"

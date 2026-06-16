@@ -34,7 +34,11 @@ def run_simulator() -> None:
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    start_metrics_server()
+    # Prometheus on a second port breaks some PaaS health probes — optional.
+    try:
+        start_metrics_server()
+    except OSError as exc:
+        log.warning("simulator metrics disabled: %s", exc)
 
     conn = connect_db()
     conn.autocommit = False

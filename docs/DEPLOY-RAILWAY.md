@@ -123,9 +123,12 @@ docker compose --profile prod up -d worker-simulator
 
 1. **Só vejo 2 Dockerfiles** — use `deploy/railway/*/Dockerfile` ou importe `docker-compose.railway.yml`.
 2. **Worker morre imediatamente** — criou como Web Service? Use **Worker**.
-3. **Build falha com COPY worker/** — Root Directory deve ser a **raiz do repo**, não `worker/`.
-4. **Indexer sem ES** — `ELASTICSEARCH_URL` vazio ok; jobs são no-op.
-5. **Fila atrasada** — escale só o worker afetado (ex. `worker-indexer`).
+3. **Healthcheck failed** — workers têm `healthcheckPath = ""` no `railway.toml`. Se a UI ainda mostra `/health`, apague em Settings → Healthcheck Path.
+4. **Build falha com COPY worker/** — Root Directory deve ser a **raiz do repo**, não `worker/`.
+5. **Postgres SSL** — use `DATABASE_SSLMODE=prefer` se `require` falhar.
+6. **API precisa subir antes** — migrations rodam no serviço `api`; simulador/indexer falham sem tabelas.
+7. **Indexer sem ES** — `ELASTICSEARCH_URL` vazio ok; jobs são no-op.
+8. **Fila atrasada** — escale só o worker afetado (ex. `worker-indexer`).
 
 ## Dev local (um processo só)
 

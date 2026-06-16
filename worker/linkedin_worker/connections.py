@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import psycopg
 import redis
@@ -16,9 +17,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("linkedin-worker.connections")
 
-DEFAULT_MAX_ATTEMPTS = 30
-DEFAULT_BASE_DELAY_SEC = 1.0
-DEFAULT_MAX_DELAY_SEC = 30.0
+DEFAULT_MAX_ATTEMPTS = 60
+DEFAULT_BASE_DELAY_SEC = 2.0
+DEFAULT_MAX_DELAY_SEC = 15.0
+CONNECT_TIMEOUT_SEC = 15
 
 
 def _retry(
@@ -47,28 +49,37 @@ def _retry(
                 delay,
             )
             time.sleep(delay)
-            delay = min(delay * 1.5, max_delay_sec)
+            delay = min(delay * 1.25, max_delay_sec)
     assert last_err is not None
     raise last_err
 
 
 def connect_db() -> psycopg.Connection:
     url = settings.DATABASE_URL
+    host = urlparse(url).hostname or "?"
 
     def _connect() -> psycopg.Connection:
-        conn = psycopg.connect(url)
+        conn = psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT_SEC)
         conn.execute("SELECT 1")
         return conn
 
+    log.info("connecting postgres host=%s", host)
     return _retry("postgres", _connect)  # type: ignore[return-value]
 
 
 def connect_redis() -> redis.Redis:
     url = settings.REDIS_URL
+    host = urlparse(url).hostname or "?"
 
     def _connect() -> redis.Redis:
-        client = redis.from_url(url, decode_responses=True)
+        client = redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=CONNECT_TIMEOUT_SEC,
+            socket_timeout=CONNECT_TIMEOUT_SEC,
+        )
         client.ping()
         return client
 
+    log.info("connecting redis host=%s", host)
     return _retry("redis", _connect)  # type: ignore[return-value]

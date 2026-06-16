@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 
 from linkedin_worker import settings
@@ -102,7 +103,12 @@ def main() -> None:
     if role not in VALID_ROLES:
         raise SystemExit(f"unknown WORKER_ROLE: {role!r}; valid: {sorted(VALID_ROLES)}")
 
-    log.info("worker starting role=%s", role)
+    log.info(
+        "worker starting role=%s health_port=%s railway=%s",
+        role,
+        settings.WORKER_HEALTH_PORT,
+        bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME")),
+    )
     start_health_server(role)
 
     runners = {

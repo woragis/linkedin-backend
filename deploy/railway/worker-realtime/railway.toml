@@ -1,13 +1,17 @@
 # Railway service: worker-realtime (Worker — not Web)
-# Settings → Root Directory: (empty / repo root)
-# Settings → Config file path: deploy/railway/worker-realtime/railway.toml
+# Root Directory: (empty / repo root)
+# Config file path: deploy/railway/worker-realtime/railway.toml
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "deploy/railway/worker-realtime/Dockerfile"
 watchPatterns = ["worker/**", "deploy/railway/worker-realtime/**"]
 
+[build.args]
+WORKER_DEPS = "base"
+WORKER_ROLE = "realtime"
+
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 120
+# Workers are not web services — HTTP healthcheck causes false deploy failures.
+healthcheckPath = ""
 restartPolicyType = "ALWAYS"

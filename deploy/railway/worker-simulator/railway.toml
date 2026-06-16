@@ -6,7 +6,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "deploy/railway/worker-simulator/Dockerfile"
 watchPatterns = ["worker/**", "deploy/railway/worker-simulator/**"]
 
+[build.args]
+WORKER_DEPS = "simulator"
+WORKER_ROLE = "simulator"
+
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckPath = ""
 restartPolicyType = "ALWAYS"
