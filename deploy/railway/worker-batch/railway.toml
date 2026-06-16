@@ -8,4 +8,5 @@ watchPatterns = ["worker/**", "deploy/railway/worker-batch/**"]
 
 [deploy]
 healthcheckPath = "/health"
+healthcheckTimeout = 120
 restartPolicyType = "ALWAYS"

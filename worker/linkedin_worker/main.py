@@ -5,15 +5,12 @@ from __future__ import annotations
 import logging
 import threading
 
-import psycopg
-import redis
-
 from linkedin_worker import settings
+from linkedin_worker.connections import connect_db, connect_redis
 from linkedin_worker.health import start_health_server
 from linkedin_worker.queue.consumer import consume_loop
 from linkedin_worker.queue.relay import relay_loop
 from linkedin_worker.scheduler import batch as batch_scheduler
-from linkedin_worker.simulator import run_simulator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("linkedin-worker")
@@ -29,18 +26,10 @@ VALID_ROLES = frozenset({
 })
 
 
-def _connect_db() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
-
-
-def _connect_redis() -> redis.Redis:
-    return redis.from_url(settings.REDIS_URL, decode_responses=True)
-
-
 def run_realtime() -> None:
-    relay_conn = _connect_db()
-    consumer_conn = _connect_db()
-    r = _connect_redis()
+    relay_conn = connect_db()
+    consumer_conn = connect_db()
+    r = connect_redis()
 
     relay_thread = threading.Thread(target=relay_loop, args=(relay_conn, r), daemon=True)
     relay_thread.start()
@@ -48,17 +37,17 @@ def run_realtime() -> None:
 
 
 def run_indexer() -> None:
-    conn = _connect_db()
-    r = _connect_redis()
+    conn = connect_db()
+    r = connect_redis()
     consume_loop(r, conn, role="indexer")
 
 
 def run_graph() -> None:
-    r = _connect_redis()
-    consumer_conn = _connect_db()
+    r = connect_redis()
+    consumer_conn = connect_db()
 
     if settings.BATCH_ENABLED:
-        sched_conn = _connect_db()
+        sched_conn = connect_db()
         threading.Thread(
             target=consume_loop,
             args=(r, consumer_conn),
@@ -71,7 +60,7 @@ def run_graph() -> None:
 
 
 def run_ml() -> None:
-    conn = _connect_db()
+    conn = connect_db()
     if not settings.BATCH_ENABLED:
         log.info("ml disabled; sleeping")
         threading.Event().wait()
@@ -80,7 +69,7 @@ def run_ml() -> None:
 
 
 def run_batch() -> None:
-    conn = _connect_db()
+    conn = connect_db()
     if not settings.BATCH_ENABLED:
         log.info("batch disabled; sleeping")
         threading.Event().wait()
@@ -90,9 +79,9 @@ def run_batch() -> None:
 
 def run_all() -> None:
     """Dev: relay + all queues + all crons in one container."""
-    relay_conn = _connect_db()
-    consumer_conn = _connect_db()
-    r = _connect_redis()
+    relay_conn = connect_db()
+    consumer_conn = connect_db()
+    r = connect_redis()
 
     batch_thread = threading.Thread(target=run_batch_legacy, daemon=True)
     batch_thread.start()
@@ -103,7 +92,7 @@ def run_all() -> None:
 
 
 def run_batch_legacy() -> None:
-    conn = _connect_db()
+    conn = connect_db()
     if settings.BATCH_ENABLED:
         batch_scheduler.start_all(conn)
 
@@ -122,9 +111,13 @@ def main() -> None:
         "graph": run_graph,
         "ml": run_ml,
         "batch": run_batch,
-        "simulator": run_simulator,
         "all": run_all,
     }
+    if role == "simulator":
+        from linkedin_worker.simulator import run_simulator
+
+        run_simulator()
+        return
     runners[role]()
 
 

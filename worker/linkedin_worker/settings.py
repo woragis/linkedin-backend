@@ -1,9 +1,12 @@
 import os
 
-DATABASE_URL = os.getenv(
+from linkedin_worker.db_url import normalize_database_url
+
+_DATABASE_URL_RAW = os.getenv(
     "DATABASE_URL",
     "postgres://linkedin:linkedin@postgres:5432/linkedin?sslmode=disable",
 )
+DATABASE_URL = normalize_database_url(_DATABASE_URL_RAW)
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 REDIS_QUEUE_KEY = os.getenv("REDIS_QUEUE_KEY", "linkedin:jobs")
 REDIS_QUEUE_REALTIME = os.getenv("REDIS_QUEUE_REALTIME", REDIS_QUEUE_KEY)

@@ -9,6 +9,7 @@ import time
 import psycopg
 
 from linkedin_worker import settings
+from linkedin_worker.connections import connect_db
 from linkedin_worker.simulator.bootstrap import bootstrap_agents
 from linkedin_worker.simulator.db import count_simulator_agents, load_agents
 from linkedin_worker.simulator.metrics import record_tick, start_metrics_server
@@ -35,7 +36,7 @@ def run_simulator() -> None:
 
     start_metrics_server()
 
-    conn = psycopg.connect(settings.DATABASE_URL)
+    conn = connect_db()
     conn.autocommit = False
 
     phase = settings.SIMULATOR_PHASE

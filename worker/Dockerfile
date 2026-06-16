@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# base | ml | simulator  (default: base — realtime, indexer, graph, batch)
+# base | ml | simulator | dev  (default: base — realtime, indexer, graph, batch)
 ARG WORKER_DEPS=base
+ARG WORKER_ROLE=realtime
 
 COPY requirements-base.txt requirements-ml.txt requirements-simulator.txt ./
 
@@ -20,8 +21,7 @@ RUN if [ "$WORKER_DEPS" = "ml" ]; then \
 COPY linkedin_worker ./linkedin_worker
 
 ENV PYTHONUNBUFFERED=1
-# Set explicitly in production — never rely on default
-ENV WORKER_ROLE=realtime
+ENV WORKER_ROLE=${WORKER_ROLE}
 ENV WORKER_HEALTH_ENABLED=1
 
 CMD ["python", "-m", "linkedin_worker.main"]
