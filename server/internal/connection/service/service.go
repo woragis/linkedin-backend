@@ -42,12 +42,25 @@ func (s *Service) Request(ctx context.Context, userID uuid.UUID, in RequestInput
 		case "accepted":
 			return nil, apperrors.Conflict(apperrors.CodeConnectionExists, apperrors.MsgConnectionExists)
 		case "pending":
+			if accepted, acceptErr := s.tryAutoAcceptSimulator(ctx, existing); acceptErr != nil {
+				return nil, acceptErr
+			} else if accepted != nil {
+				return accepted, nil
+			}
 			return nil, apperrors.Conflict(apperrors.CodeConnectionExists, apperrors.MsgConnectionExists)
 		default:
 			// rejected — allow new request (update initiator)
 			updates := map[string]any{"status": "pending", "requester_id": userID, "addressee_id": in.TargetUserID}
 			if err := s.db.WithContext(ctx).Model(&models.Connection{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 				return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+			}
+			existing.Status = "pending"
+			existing.RequesterID = userID
+			existing.AddresseeID = in.TargetUserID
+			if accepted, acceptErr := s.tryAutoAcceptSimulator(ctx, existing); acceptErr != nil {
+				return nil, acceptErr
+			} else if accepted != nil {
+				return accepted, nil
 			}
 			return s.repo.GetByID(ctx, existing.ID)
 		}
@@ -64,9 +77,43 @@ func (s *Service) Request(ctx context.Context, userID uuid.UUID, in RequestInput
 	if err := s.repo.Create(ctx, c); err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
+	if accepted, acceptErr := s.tryAutoAcceptSimulator(ctx, c); acceptErr != nil {
+		return nil, acceptErr
+	} else if accepted != nil {
+		return accepted, nil
+	}
 	_ = outbox.Enqueue(ctx, s.db,
 		outbox.Job{JobType: "graph.recompute_user", Payload: map[string]any{"user_id": userID.String()}},
 		outbox.Job{JobType: "graph.recompute_user", Payload: map[string]any{"user_id": in.TargetUserID.String()}},
+	)
+	return c, nil
+}
+
+// tryAutoAcceptSimulator accepts immediately when either party is a synthetic agent.
+func (s *Service) tryAutoAcceptSimulator(ctx context.Context, c *models.Connection) (*models.Connection, error) {
+	if c.Status == "accepted" {
+		return c, nil
+	}
+	sim, err := s.repo.IsSimulatorUser(ctx, c.AddresseeID)
+	if err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	if !sim {
+		sim, err = s.repo.IsSimulatorUser(ctx, c.RequesterID)
+		if err != nil {
+			return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+		}
+	}
+	if !sim {
+		return nil, nil
+	}
+	if err := s.repo.UpdateStatus(ctx, c.ID, "accepted"); err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	c.Status = "accepted"
+	_ = outbox.Enqueue(ctx, s.db,
+		outbox.Job{JobType: "graph.recompute_user", Payload: map[string]any{"user_id": c.RequesterID.String()}},
+		outbox.Job{JobType: "graph.recompute_user", Payload: map[string]any{"user_id": c.AddresseeID.String()}},
 	)
 	return c, nil
 }

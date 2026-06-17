@@ -109,6 +109,13 @@ func (r *Repository) UserExists(ctx context.Context, id uuid.UUID) (bool, error)
 	return count > 0, err
 }
 
+// IsSimulatorUser reports synthetic agents created by worker-simulator.
+func (r *Repository) IsSimulatorUser(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table("simulator_agents").Where("user_id = ?", userID).Count(&count).Error
+	return count > 0, err
+}
+
 func (r *Repository) CountAccepted(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&models.Connection{}).Where(
