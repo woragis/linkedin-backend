@@ -80,6 +80,9 @@ func (s *Service) SearchPeople(ctx context.Context, viewerID *uuid.UUID, q strin
 	if len(out) > limit {
 		out = out[:limit]
 	}
+	if out == nil {
+		out = []PersonResult{}
+	}
 	return out, nil
 }
 
@@ -91,11 +94,20 @@ func (s *Service) SearchPosts(ctx context.Context, q string, limit int) ([]searc
 	if limit <= 0 || limit > 50 {
 		limit = defaultLimit
 	}
+
+	var hits []searchrepo.PostHit
+	var err error
 	if s.es != nil && s.es.Enabled() {
-		hits, err := s.es.SearchPosts(ctx, q, limit)
-		if err == nil && len(hits) > 0 {
-			return hits, nil
-		}
+		hits, err = s.es.SearchPosts(ctx, q, limit)
 	}
-	return s.repo.SearchPosts(ctx, q, limit)
+	if err != nil || len(hits) == 0 {
+		hits, err = s.repo.SearchPosts(ctx, q, limit)
+	}
+	if err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	if hits == nil {
+		hits = []searchrepo.PostHit{}
+	}
+	return hits, nil
 }
