@@ -13,6 +13,7 @@ def test_connect_db_retries_then_succeeds():
 
     assert conn is mock_conn
     mock_conn.execute.assert_called_once_with("SELECT 1")
+    mock_conn.commit.assert_called_once()
     assert connect.call_count == 2
 
 

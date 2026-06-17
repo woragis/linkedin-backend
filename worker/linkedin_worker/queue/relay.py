@@ -32,19 +32,19 @@ ERROR_SQL = """
 UPDATE outbox_jobs SET last_error = %s WHERE id = %s
 """
 
-_kafka_producer = None
+_kafka_producer_client = None
 
 
-def _kafka_producer():
-    global _kafka_producer
-    if _kafka_producer is not None:
-        return _kafka_producer
+def _get_kafka_producer():
+    global _kafka_producer_client
+    if _kafka_producer_client is not None:
+        return _kafka_producer_client
     if not settings.KAFKA_BROKERS:
         return None
     try:
         from kafka import KafkaProducer
 
-        _kafka_producer = KafkaProducer(
+        _kafka_producer_client = KafkaProducer(
             bootstrap_servers=settings.KAFKA_BROKERS.split(","),
             value_serializer=lambda v: json.dumps(v).encode(),
         )
@@ -52,7 +52,7 @@ def _kafka_producer():
     except Exception:
         log.exception("kafka producer init failed")
         return None
-    return _kafka_producer
+    return _kafka_producer_client
 
 
 def _publish(r: redis.Redis, job_type: str, payload: dict[str, Any]) -> None:
@@ -62,7 +62,7 @@ def _publish(r: redis.Redis, job_type: str, payload: dict[str, Any]) -> None:
     # Legacy single-queue consumers (WORKER_ROLE=all)
     if queue != settings.REDIS_QUEUE_KEY:
         r.lpush(settings.REDIS_QUEUE_KEY, json.dumps(body))
-    producer = _kafka_producer()
+    producer = _get_kafka_producer()
     if producer is not None:
         producer.send(settings.KAFKA_TOPIC, body)
         producer.flush(1)

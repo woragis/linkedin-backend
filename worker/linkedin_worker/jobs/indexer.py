@@ -14,16 +14,21 @@ from linkedin_worker import settings
 log = logging.getLogger("linkedin-worker.indexer")
 
 
-def _es_request(method: str, path: str, body: dict[str, Any] | None = None) -> None:
+def _es_request(method: str, path: str, body: dict[str, Any] | None = None) -> bool:
     if not settings.ELASTICSEARCH_URL:
         log.debug("elasticsearch disabled, skip %s", path)
-        return
+        return True
     url = settings.ELASTICSEARCH_URL.rstrip("/") + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=10) as res:
-        res.read()
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            res.read()
+        return True
+    except Exception as exc:
+        log.warning("elasticsearch %s %s failed: %s", method, path, exc)
+        return False
 
 
 def _ensure_indices() -> None:
@@ -69,8 +74,8 @@ def index_profile(conn: psycopg.Connection, payload: dict[str, Any]) -> None:
         "schools": list(row[7] or []),
     }
     _ensure_indices()
-    _es_request("PUT", f"/people/_doc/{user_id}", doc)
-    log.info("indexed profile user_id=%s", user_id)
+    if _es_request("PUT", f"/people/_doc/{user_id}", doc):
+        log.info("indexed profile user_id=%s", user_id)
 
 
 def index_post(conn: psycopg.Connection, payload: dict[str, Any]) -> None:
@@ -95,5 +100,5 @@ def index_post(conn: psycopg.Connection, payload: dict[str, Any]) -> None:
         "body": row[3],
     }
     _ensure_indices()
-    _es_request("PUT", f"/posts/_doc/{post_id}", doc)
-    log.info("indexed post post_id=%s", post_id)
+    if _es_request("PUT", f"/posts/_doc/{post_id}", doc):
+        log.info("indexed post post_id=%s", post_id)

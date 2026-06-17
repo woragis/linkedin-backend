@@ -72,7 +72,7 @@ def consume_loop(r: redis.Redis, conn: psycopg.Connection, *, role: str) -> None
             continue
         job_type = env.get("type", "")
         payload = env.get("payload") or {}
-        log.info("job queue=%s type=%s", queue_name, job_type)
+        log.debug("job queue=%s type=%s", queue_name, job_type)
         try:
             dispatch(conn, job_type, payload, role=role)
         except Exception:

@@ -61,6 +61,7 @@ def connect_db() -> psycopg.Connection:
     def _connect() -> psycopg.Connection:
         conn = psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT_SEC)
         conn.execute("SELECT 1")
+        conn.commit()  # probe leaves INTRANS; simulator sets autocommit=False later
         return conn
 
     log.info("connecting postgres host=%s", host)
