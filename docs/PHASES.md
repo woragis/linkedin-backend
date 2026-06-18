@@ -169,3 +169,5 @@ Cada item = 1 commit quando possível.
 Fases 0–7 concluídas. Evolução planejada em [**ROADMAP.md**](ROADMAP.md) (consolidação, simulador, ciência de dados, escala).
 
 Simulador sintético: [**SIMULATOR.md**](SIMULATOR.md).
+
+Dual-realm (volume + vivo): [**REALM_PLAN.md**](REALM_PLAN.md) e fases em [**phases/**](phases/).
