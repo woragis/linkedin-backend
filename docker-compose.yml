@@ -13,6 +13,7 @@ networks:
 
 volumes:
   postgres_data:
+  postgres_live_data:
   redis_data:
   es_data:
 
@@ -27,6 +28,23 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-linkedin}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres-live:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_LIVE_USER:-linkedin_live}
+      POSTGRES_PASSWORD: ${POSTGRES_LIVE_PASSWORD:-linkedin_live}
+      POSTGRES_DB: ${POSTGRES_LIVE_DB:-linkedin_live}
+    volumes:
+      - postgres_live_data:/var/lib/postgresql/data
     networks:
       - internal
     healthcheck:
@@ -75,6 +93,7 @@ services:
     environment:
       HTTP_ADDR: ${HTTP_ADDR:-:8080}
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-linkedin}:${POSTGRES_PASSWORD:-linkedin}@postgres:5432/${POSTGRES_DB:-linkedin}?sslmode=disable}
+      DATABASE_URL_LIVE: ${DATABASE_URL_LIVE:-postgres://${POSTGRES_LIVE_USER:-linkedin_live}:${POSTGRES_LIVE_PASSWORD:-linkedin_live}@postgres-live:5432/${POSTGRES_LIVE_DB:-linkedin_live}?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_KEY: ${REDIS_QUEUE_KEY:-linkedin:jobs}
       INTERNAL_JOB_TOKEN: ${INTERNAL_JOB_TOKEN:-dev-internal-token}
@@ -90,6 +109,8 @@ services:
       - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      postgres-live:
         condition: service_healthy
       redis:
         condition: service_healthy

@@ -10,7 +10,7 @@ func CORS(cfg Config, next http.Handler) http.Handler {
 	for _, o := range cfg.CORSOrigins {
 		allowed[o] = struct{}{}
 	}
-	allowHeaders := "Authorization, Content-Type, X-Request-ID, X-Internal-Token"
+	allowHeaders := "Authorization, Content-Type, X-Request-ID, X-Internal-Token, X-App-Realm"
 	allowMethods := "GET, POST, PATCH, PUT, DELETE, OPTIONS"
 	exposeHeaders := "X-Request-ID"
 

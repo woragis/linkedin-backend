@@ -13,9 +13,10 @@ import (
 type FeedCache struct {
 	client *redis.Client
 	ttl    time.Duration
+	prefix string
 }
 
-func NewFeedCache(redisURL string, ttl time.Duration) (*FeedCache, error) {
+func NewFeedCache(redisURL string, ttl time.Duration, keyPrefix string) (*FeedCache, error) {
 	if redisURL == "" {
 		return nil, nil
 	}
@@ -26,14 +27,18 @@ func NewFeedCache(redisURL string, ttl time.Duration) (*FeedCache, error) {
 	if ttl <= 0 {
 		ttl = 60 * time.Second
 	}
-	return &FeedCache{client: redis.NewClient(opt), ttl: ttl}, nil
+	return &FeedCache{client: redis.NewClient(opt), ttl: ttl, prefix: keyPrefix}, nil
+}
+
+func (c *FeedCache) feedKey(userID uuid.UUID, variant string) string {
+	return fmt.Sprintf("%sfeed:%s:%s", c.prefix, userID, variant)
 }
 
 func (c *FeedCache) Get(ctx context.Context, userID uuid.UUID, variant string, dst any) bool {
 	if c == nil || c.client == nil {
 		return false
 	}
-	key := fmt.Sprintf("feed:%s:%s", userID, variant)
+	key := c.feedKey(userID, variant)
 	raw, err := c.client.Get(ctx, key).Bytes()
 	if err != nil {
 		return false
@@ -49,7 +54,7 @@ func (c *FeedCache) Set(ctx context.Context, userID uuid.UUID, variant string, v
 	if err != nil {
 		return
 	}
-	key := fmt.Sprintf("feed:%s:%s", userID, variant)
+	key := c.feedKey(userID, variant)
 	_ = c.client.Set(ctx, key, raw, c.ttl).Err()
 }
 
@@ -58,6 +63,6 @@ func (c *FeedCache) Invalidate(ctx context.Context, userID uuid.UUID) {
 		return
 	}
 	for _, v := range []string{"chronological", "ranked", "treatment", "control"} {
-		_ = c.client.Del(ctx, fmt.Sprintf("feed:%s:%s", userID, v)).Err()
+		_ = c.client.Del(ctx, c.feedKey(userID, v)).Err()
 	}
 }

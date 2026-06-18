@@ -6,8 +6,8 @@ import (
 	"github.com/unipe/linkedin/backend/server/internal/middleware"
 )
 
-func NewHandler(app *App, cfg middleware.Config) http.Handler {
+func NewHandler(multi *MultiApp, cfg middleware.Config) http.Handler {
 	mux := http.NewServeMux()
-	Mount(mux, app)
+	Mount(mux, multi)
 	return middleware.Chain(cfg, mux)
 }

@@ -88,7 +88,7 @@ func TestRegisterLoginProfilePatch(t *testing.T) {
 	connectionService := connsvc.New(connectionRepository, db)
 	experimentRepository := experimentrepo.New(db)
 	experimentService := experimentsvc.New(experimentRepository)
-	feedCache, _ := cache.NewFeedCache("", 60*time.Second)
+	feedCache, _ := cache.NewFeedCache("", 60*time.Second, "live:")
 	postService := postsvc.New(postRepository, connectionRepository, experimentService, feedCache, db)
 	eventService := eventsvc.New(eventRepository)
 	searchRepository := searchrepo.New(db)
@@ -118,7 +118,8 @@ func TestRegisterLoginProfilePatch(t *testing.T) {
 		Seed:            seedService,
 	}
 
-	srv := httptest.NewServer(httpserver.NewHandler(app, middleware.Config{}))
+	multi := httpserver.NewMultiApp(app, app)
+	srv := httptest.NewServer(httpserver.NewHandler(multi, middleware.Config{}))
 	defer srv.Close()
 
 	email := fmt.Sprintf("integration-%d@test.local", time.Now().UnixNano())

@@ -10,35 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	analyticsrepo "github.com/unipe/linkedin/backend/server/internal/analytics/repository"
-	analyticsvc "github.com/unipe/linkedin/backend/server/internal/analytics/service"
-	authrepo "github.com/unipe/linkedin/backend/server/internal/auth/repository"
-	authsvc "github.com/unipe/linkedin/backend/server/internal/auth/service"
-	catalogrepo "github.com/unipe/linkedin/backend/server/internal/catalog/repository"
-	connrepo "github.com/unipe/linkedin/backend/server/internal/connection/repository"
-	connsvc "github.com/unipe/linkedin/backend/server/internal/connection/service"
-	eventrepo "github.com/unipe/linkedin/backend/server/internal/event/repository"
-	eventsvc "github.com/unipe/linkedin/backend/server/internal/event/service"
-	experimentrepo "github.com/unipe/linkedin/backend/server/internal/experiment/repository"
-	experimentsvc "github.com/unipe/linkedin/backend/server/internal/experiment/service"
-	graphrepo "github.com/unipe/linkedin/backend/server/internal/graph/repository"
-	graphsvc "github.com/unipe/linkedin/backend/server/internal/graph/service"
 	"github.com/unipe/linkedin/backend/server/internal/httpserver"
 	"github.com/unipe/linkedin/backend/server/internal/middleware"
 	"github.com/unipe/linkedin/backend/server/internal/migrate"
-	jwtmgr "github.com/unipe/linkedin/backend/server/internal/platform/jwt"
-	"github.com/unipe/linkedin/backend/server/internal/platform/cache"
 	"github.com/unipe/linkedin/backend/server/internal/platform/postgres"
-	postrepo "github.com/unipe/linkedin/backend/server/internal/post/repository"
-	postsvc "github.com/unipe/linkedin/backend/server/internal/post/service"
-	profilerepo "github.com/unipe/linkedin/backend/server/internal/profile/repository"
-	profilesvc "github.com/unipe/linkedin/backend/server/internal/profile/service"
-	recorepo "github.com/unipe/linkedin/backend/server/internal/recommendation/repository"
-	recosvc "github.com/unipe/linkedin/backend/server/internal/recommendation/service"
-	seedsvc "github.com/unipe/linkedin/backend/server/internal/seed/service"
-	searchrepo "github.com/unipe/linkedin/backend/server/internal/search/repository"
-	"github.com/unipe/linkedin/backend/server/internal/search/elasticsearch"
-	searchsvc "github.com/unipe/linkedin/backend/server/internal/search/service"
+	"github.com/unipe/linkedin/backend/server/internal/platform/realm"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -47,9 +24,14 @@ func main() {
 		addr = ":8080"
 	}
 
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
+	volumeDSN := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if volumeDSN == "" {
 		log.Fatal("DATABASE_URL is required")
+	}
+
+	liveDSN := strings.TrimSpace(os.Getenv("DATABASE_URL_LIVE"))
+	if liveDSN == "" {
+		liveDSN = volumeDSN
 	}
 
 	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
@@ -57,83 +39,34 @@ func main() {
 		log.Fatal("JWT_SECRET is required")
 	}
 
-	db, err := postgres.Open(dsn)
+	redisURL := os.Getenv("REDIS_URL")
+	esURL := strings.TrimSpace(os.Getenv("ELASTICSEARCH_URL"))
+	internalToken := os.Getenv("INTERNAL_JOB_TOKEN")
+
+	volumeDB, err := openAndMigrate(volumeDSN)
 	if err != nil {
-		log.Fatalf("database: %v", err)
+		log.Fatalf("volume database: %v", err)
 	}
 
-	if skip := strings.TrimSpace(os.Getenv("SKIP_SQL_MIGRATIONS")); skip != "1" && !strings.EqualFold(skip, "true") {
-		dir := strings.TrimSpace(os.Getenv("MIGRATIONS_DIR"))
-		if dir == "" {
-			dir = migrate.ResolveDir()
-		}
-		if dir != "" {
-			sqlDB, err := db.DB()
-			if err != nil {
-				log.Fatalf("sql db: %v", err)
-			}
-			mctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			err = migrate.Up(mctx, sqlDB, dir)
-			cancel()
-			if err != nil {
-				log.Fatalf("sql migrate: %v", err)
-			}
-			log.Printf("sql migrations applied from %s", dir)
+	var liveDB = volumeDB
+	if liveDSN != volumeDSN {
+		liveDB, err = openAndMigrate(liveDSN)
+		if err != nil {
+			log.Fatalf("live database: %v", err)
 		}
 	}
 
-	jwt, err := jwtmgr.NewManager(jwtSecret, 7*24*time.Hour)
-	if err != nil {
-		log.Fatalf("jwt: %v", err)
-	}
+	volumeApp := httpserver.BuildApp(httpserver.BuildConfigForRealm(
+		volumeDB, redisURL, esURL, internalToken, jwtSecret, realm.Volume,
+	))
+	liveApp := httpserver.BuildApp(httpserver.BuildConfigForRealm(
+		liveDB, redisURL, esURL, internalToken, jwtSecret, realm.Live,
+	))
 
-	authRepository := authrepo.New(db)
-	profileRepository := profilerepo.New(db)
-	catalogRepository := catalogrepo.New(db)
-	connectionRepository := connrepo.New(db)
-	postRepository := postrepo.New(db)
-	eventRepository := eventrepo.New(db)
-
-	authService := authsvc.New(authRepository, db, jwt)
-	profileService := profilesvc.New(profileRepository, catalogRepository, db)
-	connectionService := connsvc.New(connectionRepository, db)
-	experimentRepository := experimentrepo.New(db)
-	experimentService := experimentsvc.New(experimentRepository)
-
-	feedCache, _ := cache.NewFeedCache(os.Getenv("REDIS_URL"), 60*time.Second)
-
-	postService := postsvc.New(postRepository, connectionRepository, experimentService, feedCache, db)
-	eventService := eventsvc.New(eventRepository)
-	searchRepository := searchrepo.New(db)
-	esClient := elasticsearch.New(strings.TrimSpace(os.Getenv("ELASTICSEARCH_URL")))
-	searchService := searchsvc.New(searchRepository, esClient)
-	recommendationRepository := recorepo.New(db)
-	recommendationService := recosvc.New(recommendationRepository, experimentRepository)
-	graphRepository := graphrepo.New(db)
-	graphService := graphsvc.New(graphRepository)
-	analyticsRepository := analyticsrepo.New(db)
-	analyticsService := analyticsvc.New(analyticsRepository, experimentRepository)
-	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository, connectionService, postService)
-
-	app := &httpserver.App{
-		DB:                db,
-		InternalJobSecret: os.Getenv("INTERNAL_JOB_TOKEN"),
-		JWTSecret:         jwtSecret,
-		Auth:              authService,
-		Profiles:          profileService,
-		Connections:       connectionService,
-		Posts:             postService,
-		Events:            eventService,
-		Search:            searchService,
-		Recommendations:   recommendationService,
-		Graph:             graphService,
-		Analytics:         analyticsService,
-		Experiments:       experimentService,
-		Seed:              seedService,
-	}
+	multi := httpserver.NewMultiApp(volumeApp, liveApp)
 
 	mwCfg := middleware.LoadConfigFromEnv()
-	handler := httpserver.NewHandler(app, mwCfg)
+	handler := httpserver.NewHandler(multi, mwCfg)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -142,7 +75,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("api listening on %s", addr)
+		log.Printf("api listening on %s (realms: volume + live)", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
@@ -157,4 +90,33 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
+}
+
+func openAndMigrate(dsn string) (*gorm.DB, error) {
+	db, err := postgres.Open(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	if skip := strings.TrimSpace(os.Getenv("SKIP_SQL_MIGRATIONS")); skip != "1" && !strings.EqualFold(skip, "true") {
+		dir := strings.TrimSpace(os.Getenv("MIGRATIONS_DIR"))
+		if dir == "" {
+			dir = migrate.ResolveDir()
+		}
+		if dir != "" {
+			sqlDB, err := db.DB()
+			if err != nil {
+				return nil, err
+			}
+			mctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			err = migrate.Up(mctx, sqlDB, dir)
+			cancel()
+			if err != nil {
+				return nil, err
+			}
+			log.Printf("sql migrations applied from %s", dir)
+		}
+	}
+
+	return db, nil
 }

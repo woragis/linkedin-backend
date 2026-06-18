@@ -3,105 +3,202 @@ package httpserver
 import (
 	"net/http"
 
-	"github.com/unipe/linkedin/backend/server/internal/middleware"
 	"github.com/unipe/linkedin/backend/server/internal/observability/metrics"
 )
 
-func Mount(mux *http.ServeMux, app *App) {
+func Mount(mux *http.ServeMux, multi *MultiApp) {
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.Handle("GET /metrics", metrics.Handler())
-	if app != nil && app.DB != nil {
-		mux.HandleFunc("GET /ready", handleReady(app.DB))
+
+	if multi != nil {
+		mux.HandleFunc("GET /ready", handleReadyMulti(multi))
 	}
 
-	if app == nil || app.Auth == nil {
+	if multi == nil || multi.Live == nil && multi.Volume == nil {
 		return
 	}
 
-	ah := newAuthHandler(app.Auth)
-	mux.HandleFunc("POST /v1/auth/register", ah.register)
-	mux.HandleFunc("POST /v1/auth/login", ah.login)
+	mux.HandleFunc("POST /v1/auth/register", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Auth == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newAuthHandler(app.Auth).register(w, r)
+	})
+	mux.HandleFunc("POST /v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Auth == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newAuthHandler(app.Auth).login(w, r)
+	})
 
-	require := func(h http.HandlerFunc) http.Handler {
-		return middleware.RequireAuth(app.Auth, h)
-	}
+	mux.Handle("POST /v1/events", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newEventHandler(app.Events).ingest(w, r)
+	}))
 
-	if app.Events != nil {
-		eh := newEventHandler(app.Events)
-		mux.Handle("POST /v1/events", require(http.HandlerFunc(eh.ingest)))
-	}
+	mux.Handle("GET /v1/me", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).me(w, r)
+	}))
+	mux.Handle("PATCH /v1/me/profile", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).patchMe(w, r)
+	}))
+	mux.HandleFunc("GET /v1/users/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Profiles == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newProfileHandler(app.Profiles).getBySlug(w, r)
+	})
 
-	if app.Profiles != nil {
-		ph := newProfileHandler(app.Profiles)
-		mux.Handle("GET /v1/me", require(http.HandlerFunc(ph.me)))
-		mux.Handle("PATCH /v1/me/profile", require(http.HandlerFunc(ph.patchMe)))
-		mux.HandleFunc("GET /v1/users/{slug}", ph.getBySlug)
+	mux.Handle("GET /v1/me/experiences", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).listExperiences(w, r)
+	}))
+	mux.Handle("POST /v1/me/experiences", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).createExperience(w, r)
+	}))
+	mux.Handle("PATCH /v1/me/experiences/{id}", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).patchExperience(w, r)
+	}))
+	mux.Handle("DELETE /v1/me/experiences/{id}", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).deleteExperience(w, r)
+	}))
 
-		mux.Handle("GET /v1/me/experiences", require(http.HandlerFunc(ph.listExperiences)))
-		mux.Handle("POST /v1/me/experiences", require(http.HandlerFunc(ph.createExperience)))
-		mux.Handle("PATCH /v1/me/experiences/{id}", require(http.HandlerFunc(ph.patchExperience)))
-		mux.Handle("DELETE /v1/me/experiences/{id}", require(http.HandlerFunc(ph.deleteExperience)))
+	mux.Handle("GET /v1/me/educations", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).listEducations(w, r)
+	}))
+	mux.Handle("POST /v1/me/educations", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).createEducation(w, r)
+	}))
+	mux.Handle("PATCH /v1/me/educations/{id}", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).patchEducation(w, r)
+	}))
+	mux.Handle("DELETE /v1/me/educations/{id}", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).deleteEducation(w, r)
+	}))
 
-		mux.Handle("GET /v1/me/educations", require(http.HandlerFunc(ph.listEducations)))
-		mux.Handle("POST /v1/me/educations", require(http.HandlerFunc(ph.createEducation)))
-		mux.Handle("PATCH /v1/me/educations/{id}", require(http.HandlerFunc(ph.patchEducation)))
-		mux.Handle("DELETE /v1/me/educations/{id}", require(http.HandlerFunc(ph.deleteEducation)))
+	mux.Handle("GET /v1/me/skills", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).listSkills(w, r)
+	}))
+	mux.Handle("PUT /v1/me/skills", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newProfileHandler(app.Profiles).replaceSkills(w, r)
+	}))
 
-		mux.Handle("GET /v1/me/skills", require(http.HandlerFunc(ph.listSkills)))
-		mux.Handle("PUT /v1/me/skills", require(http.HandlerFunc(ph.replaceSkills)))
-	}
+	mux.Handle("POST /v1/connections/request", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newConnectionHandler(app.Connections).request(w, r)
+	}))
+	mux.Handle("PATCH /v1/connections/{id}/accept", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newConnectionHandler(app.Connections).accept(w, r)
+	}))
+	mux.Handle("PATCH /v1/connections/{id}/reject", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newConnectionHandler(app.Connections).reject(w, r)
+	}))
+	mux.Handle("GET /v1/connections", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newConnectionHandler(app.Connections).list(w, r)
+	}))
+	mux.Handle("GET /v1/connections/pending", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newConnectionHandler(app.Connections).pending(w, r)
+	}))
 
-	if app.Connections != nil {
-		ch := newConnectionHandler(app.Connections)
-		mux.Handle("POST /v1/connections/request", require(http.HandlerFunc(ch.request)))
-		mux.Handle("PATCH /v1/connections/{id}/accept", require(http.HandlerFunc(ch.accept)))
-		mux.Handle("PATCH /v1/connections/{id}/reject", require(http.HandlerFunc(ch.reject)))
-		mux.Handle("GET /v1/connections", require(http.HandlerFunc(ch.list)))
-		mux.Handle("GET /v1/connections/pending", require(http.HandlerFunc(ch.pending)))
-	}
+	mux.Handle("POST /v1/posts", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newPostHandler(app.Posts).create(w, r)
+	}))
+	mux.HandleFunc("GET /v1/posts/{id}", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Posts == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newPostHandler(app.Posts).get(w, r)
+	})
+	mux.Handle("POST /v1/posts/{id}/reactions", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newPostHandler(app.Posts).react(w, r)
+	}))
+	mux.Handle("POST /v1/posts/{id}/comments", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newPostHandler(app.Posts).comment(w, r)
+	}))
+	mux.HandleFunc("GET /v1/posts/{id}/comments", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Posts == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newPostHandler(app.Posts).listComments(w, r)
+	})
+	mux.Handle("GET /v1/feed", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newPostHandler(app.Posts).feed(w, r)
+	}))
 
-	if app.Posts != nil {
-		po := newPostHandler(app.Posts)
-		mux.Handle("POST /v1/posts", require(http.HandlerFunc(po.create)))
-		mux.HandleFunc("GET /v1/posts/{id}", po.get)
-		mux.Handle("POST /v1/posts/{id}/reactions", require(http.HandlerFunc(po.react)))
-		mux.Handle("POST /v1/posts/{id}/comments", require(http.HandlerFunc(po.comment)))
-		mux.HandleFunc("GET /v1/posts/{id}/comments", po.listComments)
-		mux.Handle("GET /v1/feed", require(http.HandlerFunc(po.feed)))
-	}
+	mux.HandleFunc("GET /v1/search/people", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Search == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newSearchHandler(app.Search).people(w, r)
+	})
+	mux.HandleFunc("GET /v1/search/posts", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Search == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newSearchHandler(app.Search).posts(w, r)
+	})
 
-	if app.Search != nil {
-		sh := newSearchHandler(app.Search)
-		mux.HandleFunc("GET /v1/search/people", sh.people)
-		mux.HandleFunc("GET /v1/search/posts", sh.posts)
-	}
+	mux.Handle("GET /v1/recommendations/people", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newRecommendationHandler(app.Recommendations).people(w, r)
+	}))
+	mux.Handle("GET /v1/recommendations/meta", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newRecommendationHandler(app.Recommendations).peopleMeta(w, r)
+	}))
 
-	if app.Recommendations != nil {
-		rh := newRecommendationHandler(app.Recommendations)
-		mux.Handle("GET /v1/recommendations/people", require(http.HandlerFunc(rh.people)))
-		mux.Handle("GET /v1/recommendations/meta", require(http.HandlerFunc(rh.peopleMeta)))
-	}
+	mux.Handle("GET /v1/network/graph", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newGraphHandler(app.Graph).userGraph(w, r)
+	}))
+	mux.HandleFunc("GET /v1/network/influencers", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Graph == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newGraphHandler(app.Graph).influencers(w, r)
+	})
+	mux.Handle("GET /v1/network/link-predictions", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newGraphHandler(app.Graph).linkPredictions(w, r)
+	}))
 
-	if app.Graph != nil {
-		gh := newGraphHandler(app.Graph)
-		mux.Handle("GET /v1/network/graph", require(http.HandlerFunc(gh.userGraph)))
-		mux.HandleFunc("GET /v1/network/influencers", gh.influencers)
-		mux.Handle("GET /v1/network/link-predictions", require(http.HandlerFunc(gh.linkPredictions)))
-	}
+	mux.Handle("GET /v1/analytics/overview", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).overview(w, r)
+	}))
+	mux.Handle("GET /v1/analytics/top-posts", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).topPosts(w, r)
+	}))
+	mux.Handle("GET /v1/analytics/cohorts", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).cohorts(w, r)
+	}))
+	mux.Handle("GET /v1/analytics/churn", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).churn(w, r)
+	}))
+	mux.Handle("GET /v1/analytics/dau", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).dau(w, r)
+	}))
+	mux.Handle("GET /v1/analytics/experiments", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).experiments(w, r)
+	}))
+	mux.Handle("GET /v1/analytics/ml-models", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newAnalyticsHandler(app.Analytics).mlModels(w, r)
+	}))
 
-	if app.Analytics != nil {
-		ah := newAnalyticsHandler(app.Analytics)
-		mux.Handle("GET /v1/analytics/overview", require(http.HandlerFunc(ah.overview)))
-		mux.Handle("GET /v1/analytics/top-posts", require(http.HandlerFunc(ah.topPosts)))
-		mux.Handle("GET /v1/analytics/cohorts", require(http.HandlerFunc(ah.cohorts)))
-		mux.Handle("GET /v1/analytics/churn", require(http.HandlerFunc(ah.churn)))
-		mux.Handle("GET /v1/analytics/dau", require(http.HandlerFunc(ah.dau)))
-		mux.Handle("GET /v1/analytics/experiments", require(http.HandlerFunc(ah.experiments)))
-		mux.Handle("GET /v1/analytics/ml-models", require(http.HandlerFunc(ah.mlModels)))
-	}
-
-	if app.Seed != nil {
-		ih := newInternalHandler(app.InternalJobSecret, app.Seed)
-		mux.HandleFunc("POST /v1/internal/seed-demo", ih.seedDemo)
-	}
+	mux.HandleFunc("POST /v1/internal/seed-demo", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil || app.Seed == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newInternalHandler(app.InternalJobSecret, app.Seed).seedDemo(w, r)
+	})
 }
