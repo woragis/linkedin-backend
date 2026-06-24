@@ -38,7 +38,8 @@ def run_batch(conn: psycopg.Connection) -> None:
         INSERT INTO analytics.post_engagement_daily (day, post_id, views, reactions, comments, computed_at)
         SELECT %s, p.id,
                COALESCE(SUM(CASE WHEN e.event_type = 'post_viewed' THEN 1 ELSE 0 END), 0)::int,
-               (SELECT COUNT(*)::int FROM reactions r WHERE r.post_id = p.id),
+               (SELECT COUNT(*)::int FROM content_reactions cr
+                WHERE cr.target_type = 'post' AND cr.target_id = p.id),
                (SELECT COUNT(*)::int FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL),
                now()
         FROM posts p

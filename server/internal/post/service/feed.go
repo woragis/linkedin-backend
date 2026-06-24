@@ -45,12 +45,7 @@ func (s *Service) Feed(ctx context.Context, userID uuid.UUID, limit int) (*FeedR
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
 
-	out := make([]PostView, 0, len(rows))
-	for _, p := range rows {
-		rc, _ := s.posts.ReactionCount(ctx, p.ID)
-		cc, _ := s.posts.CommentCount(ctx, p.ID)
-		out = append(out, PostView{Post: p, ReactionCount: rc, CommentCount: cc})
-	}
+	out := s.enrichPostViews(ctx, rows, userID)
 	resp := &FeedResponse{Variant: variant, Posts: out}
 	if s.feedCache != nil {
 		s.feedCache.Set(ctx, userID, variant, resp)

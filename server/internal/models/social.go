@@ -43,13 +43,14 @@ type Reaction struct {
 func (Reaction) TableName() string { return "reactions" }
 
 type Comment struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	PostID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"post_id"`
-	AuthorID  uuid.UUID  `gorm:"type:uuid;not null" json:"author_id"`
-	Body      string     `gorm:"not null" json:"body"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	ID              uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	PostID          uuid.UUID  `gorm:"type:uuid;not null;index" json:"post_id"`
+	AuthorID        uuid.UUID  `gorm:"type:uuid;not null" json:"author_id"`
+	ParentCommentID *uuid.UUID `gorm:"type:uuid;index" json:"parent_comment_id,omitempty"`
+	Body            string     `gorm:"not null" json:"body"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 
 	Author Profile `gorm:"foreignKey:AuthorID;references:UserID" json:"author,omitempty"`
 }

@@ -10,6 +10,7 @@ const (
 	CodePostNotFound    = "POST_NOT_FOUND"
 	CodePostInvalidBody = "POST_INVALID_BODY"
 	CodeCommentInvalid  = "COMMENT_INVALID_BODY"
+	CodeCommentNotFound = "COMMENT_NOT_FOUND"
 	CodeEventsInvalid   = "EVENTS_INVALID_BODY"
 )
 
@@ -20,4 +21,5 @@ const (
 	MsgConnectionForbidden = "Not allowed on this connection."
 
 	MsgPostNotFound = "Post not found."
+	MsgCommentNotFound = "Comment not found."
 )

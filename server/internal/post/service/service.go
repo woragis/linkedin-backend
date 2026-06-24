@@ -44,10 +44,23 @@ type CreatePostRequest struct {
 	Body string `json:"body"`
 }
 
-type PostView struct {
-	models.Post
-	ReactionCount int64 `json:"reaction_count"`
-	CommentCount  int64 `json:"comment_count"`
+var validReactionKinds = map[string]struct{}{
+	"like":        {},
+	"celebrate":   {},
+	"support":     {},
+	"insightful":  {},
+	"love":        {},
+	"funny":       {},
+}
+
+func normalizeReactionKind(kind string) (string, error) {
+	if kind == "" {
+		return "like", nil
+	}
+	if _, ok := validReactionKinds[kind]; !ok {
+		return "", apperrors.Invalid(apperrors.CodePostInvalidBody, "invalid reaction kind")
+	}
+	return kind, nil
 }
 
 func (s *Service) Create(ctx context.Context, authorID uuid.UUID, req CreatePostRequest) (*PostView, error) {
@@ -63,14 +76,14 @@ func (s *Service) Create(ctx context.Context, authorID uuid.UUID, req CreatePost
 		JobType: "search.index_post",
 		Payload: map[string]any{"post_id": p.ID.String()},
 	})
-	return s.view(ctx, p.ID)
+	return s.view(ctx, p.ID, authorID)
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*PostView, error) {
-	return s.view(ctx, id)
+	return s.view(ctx, id, uuid.Nil)
 }
 
-func (s *Service) view(ctx context.Context, id uuid.UUID) (*PostView, error) {
+func (s *Service) view(ctx context.Context, id uuid.UUID, viewerID uuid.UUID) (*PostView, error) {
 	p, err := s.posts.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -78,55 +91,97 @@ func (s *Service) view(ctx context.Context, id uuid.UUID) (*PostView, error) {
 		}
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
-	rc, _ := s.posts.ReactionCount(ctx, id)
-	cc, _ := s.posts.CommentCount(ctx, id)
-	return &PostView{Post: *p, ReactionCount: rc, CommentCount: cc}, nil
+	out := s.enrichPostView(ctx, *p, viewerID)
+	return &out, nil
 }
 
 func (s *Service) React(ctx context.Context, userID, postID uuid.UUID, kind string) error {
-	if _, err := s.view(ctx, postID); err != nil {
+	normalized, err := normalizeReactionKind(kind)
+	if err != nil {
 		return err
 	}
-	if kind == "" {
-		kind = "like"
+	if _, err := s.view(ctx, postID, userID); err != nil {
+		return err
 	}
-	if err := s.posts.AddReaction(ctx, postID, userID, kind); err != nil {
+	if err := s.posts.AddReaction(ctx, postID, userID, normalized); err != nil {
 		return apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
 	return nil
 }
 
-type CreateCommentRequest struct {
-	Body string `json:"body"`
+func (s *Service) ReactComment(ctx context.Context, userID, commentID uuid.UUID, kind string) error {
+	normalized, err := normalizeReactionKind(kind)
+	if err != nil {
+		return err
+	}
+	c, err := s.posts.GetCommentByID(ctx, commentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NotFound(apperrors.CodeCommentNotFound, apperrors.MsgCommentNotFound)
+		}
+		return apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	if err := s.posts.UpsertContentReaction(ctx, postrepo.TargetComment, commentID, userID, normalized); err != nil {
+		return apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	_ = c
+	return nil
 }
 
-func (s *Service) Comment(ctx context.Context, userID, postID uuid.UUID, req CreateCommentRequest) (*models.Comment, error) {
+type CreateCommentRequest struct {
+	Body            string     `json:"body"`
+	ParentCommentID *uuid.UUID `json:"parent_comment_id,omitempty"`
+}
+
+func (s *Service) Comment(ctx context.Context, userID, postID uuid.UUID, req CreateCommentRequest) (*CommentView, error) {
 	body := strings.TrimSpace(req.Body)
 	if body == "" {
 		return nil, apperrors.Invalid(apperrors.CodeCommentInvalid, "body is required")
 	}
-	if _, err := s.view(ctx, postID); err != nil {
+	if _, err := s.view(ctx, postID, userID); err != nil {
 		return nil, err
 	}
-	c := &models.Comment{ID: uuid.New(), PostID: postID, AuthorID: userID, Body: body}
+	var parentID *uuid.UUID
+	if req.ParentCommentID != nil && *req.ParentCommentID != uuid.Nil {
+		parent, err := s.posts.GetCommentByID(ctx, *req.ParentCommentID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, apperrors.NotFound(apperrors.CodeCommentNotFound, apperrors.MsgCommentNotFound)
+			}
+			return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+		}
+		if parent.PostID != postID {
+			return nil, apperrors.Invalid(apperrors.CodeCommentInvalid, "parent comment belongs to another post")
+		}
+		if parent.ParentCommentID != nil {
+			return nil, apperrors.Invalid(apperrors.CodeCommentInvalid, "only one level of replies is allowed")
+		}
+		parentID = req.ParentCommentID
+	}
+	c := &models.Comment{
+		ID:              uuid.New(),
+		PostID:          postID,
+		AuthorID:        userID,
+		ParentCommentID: parentID,
+		Body:            body,
+	}
 	if err := s.posts.AddComment(ctx, c); err != nil {
 		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
 	}
-	rows, err := s.posts.ListComments(ctx, postID)
+	created, err := s.posts.GetCommentByID(ctx, c.ID)
 	if err != nil {
-		return c, nil
+		return s.enrichSingleComment(ctx, *c, userID)
 	}
-	for _, row := range rows {
-		if row.ID == c.ID {
-			return &row, nil
-		}
-	}
-	return c, nil
+	return s.enrichSingleComment(ctx, *created, userID)
 }
 
-func (s *Service) ListComments(ctx context.Context, postID uuid.UUID) ([]models.Comment, error) {
-	if _, err := s.view(ctx, postID); err != nil {
+func (s *Service) ListComments(ctx context.Context, postID, viewerID uuid.UUID) ([]CommentView, error) {
+	if _, err := s.view(ctx, postID, viewerID); err != nil {
 		return nil, err
 	}
-	return s.posts.ListComments(ctx, postID)
+	rows, err := s.posts.ListComments(ctx, postID)
+	if err != nil {
+		return nil, apperrors.InternalCause(apperrors.CodeInternal, apperrors.MsgInternal, err)
+	}
+	return s.buildCommentTree(ctx, rows, viewerID)
 }

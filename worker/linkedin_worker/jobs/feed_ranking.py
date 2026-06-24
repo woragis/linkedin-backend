@@ -31,7 +31,8 @@ def run_batch(conn: psycopg.Connection) -> None:
             """
             SELECT po.id::text, po.author_id::text, po.created_at,
                    COALESCE(gm.pagerank, 0) AS pagerank,
-                   (SELECT COUNT(*)::int FROM reactions r WHERE r.post_id = po.id) AS rxn,
+                   (SELECT COUNT(*)::int FROM content_reactions cr
+                    WHERE cr.target_type = 'post' AND cr.target_id = po.id) AS rxn,
                    (SELECT COUNT(*)::int FROM comments c WHERE c.post_id = po.id AND c.deleted_at IS NULL) AS cmts
             FROM posts po
             LEFT JOIN user_graph_metrics gm ON gm.user_id = po.author_id

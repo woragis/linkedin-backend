@@ -94,17 +94,42 @@ func (h *postHandler) comment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *postHandler) listComments(w http.ResponseWriter, r *http.Request) {
+	userID := mustUser(w, r)
+	if userID == uuid.Nil {
+		return
+	}
 	postID, err := parseUUIDParam(r, "id")
 	if err != nil {
 		apperrors.WriteError(w, err)
 		return
 	}
-	out, err := h.posts.ListComments(r.Context(), postID)
+	out, err := h.posts.ListComments(r.Context(), postID, userID)
 	if err != nil {
 		apperrors.WriteError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *postHandler) reactComment(w http.ResponseWriter, r *http.Request) {
+	userID := mustUser(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	commentID, err := parseUUIDParam(r, "id")
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	var body struct {
+		Kind string `json:"kind"`
+	}
+	_ = decodeJSON(r, &body)
+	if err := h.posts.ReactComment(r.Context(), userID, commentID, body.Kind); err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *postHandler) feed(w http.ResponseWriter, r *http.Request) {

@@ -120,14 +120,12 @@ func Mount(mux *http.ServeMux, multi *MultiApp) {
 	mux.Handle("POST /v1/posts/{id}/comments", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
 		newPostHandler(app.Posts).comment(w, r)
 	}))
-	mux.HandleFunc("GET /v1/posts/{id}/comments", func(w http.ResponseWriter, r *http.Request) {
-		app := multi.AppFor(r)
-		if app == nil || app.Posts == nil {
-			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
-			return
-		}
+	mux.Handle("GET /v1/posts/{id}/comments", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
 		newPostHandler(app.Posts).listComments(w, r)
-	})
+	}))
+	mux.Handle("POST /v1/comments/{id}/reactions", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newPostHandler(app.Posts).reactComment(w, r)
+	}))
 	mux.Handle("GET /v1/feed", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
 		newPostHandler(app.Posts).feed(w, r)
 	}))

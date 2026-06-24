@@ -90,14 +90,20 @@ func (r *Repository) RankedFeed(ctx context.Context, userID uuid.UUID, limit int
 }
 
 func (r *Repository) AddReaction(ctx context.Context, postID, userID uuid.UUID, kind string) error {
-	rxn := models.Reaction{PostID: postID, UserID: userID, Kind: kind}
-	return r.db.WithContext(ctx).Save(&rxn).Error
+	return r.UpsertContentReaction(ctx, TargetPost, postID, userID, kind)
 }
 
 func (r *Repository) ReactionCount(ctx context.Context, postID uuid.UUID) (int64, error) {
-	var n int64
-	err := r.db.WithContext(ctx).Model(&models.Reaction{}).Where("post_id = ?", postID).Count(&n).Error
-	return n, err
+	return r.ContentReactionCount(ctx, TargetPost, postID)
+}
+
+func (r *Repository) GetCommentByID(ctx context.Context, id uuid.UUID) (*models.Comment, error) {
+	var c models.Comment
+	err := r.db.WithContext(ctx).
+		Preload("Author").
+		Where("deleted_at IS NULL").
+		First(&c, "id = ?", id).Error
+	return &c, err
 }
 
 func (r *Repository) AddComment(ctx context.Context, c *models.Comment) error {
