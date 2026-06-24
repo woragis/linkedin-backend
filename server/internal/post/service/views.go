@@ -141,6 +141,11 @@ func (s *Service) buildCommentTree(
 		views[*c.ParentCommentID] = parent
 	}
 
+	return nestCommentViews(rows, views), nil
+}
+
+// nestCommentViews collects top-level comments after replies were attached in views.
+func nestCommentViews(rows []models.Comment, views map[uuid.UUID]CommentView) []CommentView {
 	roots := make([]CommentView, 0)
 	for _, c := range rows {
 		if c.ParentCommentID != nil {
@@ -148,7 +153,7 @@ func (s *Service) buildCommentTree(
 		}
 		roots = append(roots, views[c.ID])
 	}
-	return roots, nil
+	return roots
 }
 
 func (s *Service) enrichSingleComment(ctx context.Context, c models.Comment, viewerID uuid.UUID) (*CommentView, error) {

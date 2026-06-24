@@ -151,7 +151,7 @@ func TestSmoke_DemoFlow(t *testing.T) {
 		t.Fatalf("create comment status=%d body=%v", code, comment)
 	}
 
-	code, comments := httpJSONArray(t, http.MethodGet, "/v1/posts/"+postID+"/comments", nil, nil)
+	code, comments := httpJSONArray(t, http.MethodGet, "/v1/posts/"+postID+"/comments", nil, auth)
 	if code != http.StatusOK {
 		t.Fatalf("list comments status=%d", code)
 	}

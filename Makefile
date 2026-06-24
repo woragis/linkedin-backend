@@ -6,7 +6,7 @@ build:
 test: test-unit test-integration test-e2e test-py
 
 test-unit:
-	cd server && go test ./...
+	cd server && go test $$(go list ./... | grep -vE '/integration|/e2e')
 
 test-integration:
 	cd server && go test -tags=integration ./integration/...
