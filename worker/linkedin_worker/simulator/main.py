@@ -12,6 +12,7 @@ from linkedin_worker import settings
 from linkedin_worker.connections import connect_db
 from linkedin_worker.simulator.bootstrap import bootstrap_agents
 from linkedin_worker.simulator.db import count_simulator_agents, load_agents
+from linkedin_worker.simulator.graph_bootstrap import bootstrap_graph, count_graph_lab_agents
 from linkedin_worker.simulator.metrics import record_tick, start_metrics_server
 from linkedin_worker.simulator.steady import run_tick
 
@@ -44,12 +45,41 @@ def run_simulator() -> None:
     conn.autocommit = False
 
     phase = settings.SIMULATOR_PHASE
+    graph_only = settings.SIMULATOR_MODE == "graph_only"
+    target = settings.simulator_target_count()
     log.info(
-        "simulator starting phase=%s agents_target=%s seed=%s",
+        "simulator starting phase=%s mode=%s agents_target=%s seed=%s",
         phase,
-        settings.SIMULATOR_AGENT_COUNT,
+        settings.SIMULATOR_MODE,
+        target,
         settings.SIMULATOR_SEED,
     )
+
+    if graph_only:
+        if phase in ("bootstrap", "auto"):
+            created = bootstrap_graph(conn)
+            if created:
+                log.info(
+                    "graph bootstrap created=%s total_graph_agents=%s",
+                    created,
+                    count_graph_lab_agents(conn),
+                )
+            if phase == "bootstrap":
+                log.info("graph bootstrap phase complete; exiting")
+                conn.close()
+                return
+        elif phase == "steady":
+            total = count_graph_lab_agents(conn)
+            if total < target:
+                log.warning(
+                    "graph steady with insufficient agents have=%s want=%s; run bootstrap first",
+                    total,
+                    target,
+                )
+        log.info("graph_only mode: steady social loop disabled; sleeping")
+        threading.Event().wait()
+        conn.close()
+        return
 
     if phase in ("bootstrap", "auto"):
         created = bootstrap_agents(conn)

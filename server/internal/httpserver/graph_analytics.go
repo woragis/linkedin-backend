@@ -3,11 +3,13 @@ package httpserver
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/unipe/linkedin/backend/server/internal/apperrors"
 	analyticsvc "github.com/unipe/linkedin/backend/server/internal/analytics/service"
 	graphsvc "github.com/unipe/linkedin/backend/server/internal/graph/service"
+	"github.com/unipe/linkedin/backend/server/internal/platform/realm"
 )
 
 type graphHandler struct {
@@ -48,6 +50,29 @@ func (h *graphHandler) linkPredictions(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	out, err := h.graph.LinkPredictions(r.Context(), userID, limit)
+	if err != nil {
+		apperrors.WriteError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *graphHandler) labSample(w http.ResponseWriter, r *http.Request) {
+	if realm.FromContext(r.Context()) != realm.Volume {
+		apperrors.WriteError(w, apperrors.Forbidden("REALM_FORBIDDEN", "Lab sample is only available in volume realm"))
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	var seed uuid.UUID
+	if raw := strings.TrimSpace(r.URL.Query().Get("seed")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			apperrors.WriteError(w, apperrors.Invalid("INVALID_SEED", "seed must be a valid UUID"))
+			return
+		}
+		seed = parsed
+	}
+	out, err := h.graph.LabSample(r.Context(), seed, limit)
 	if err != nil {
 		apperrors.WriteError(w, err)
 		return

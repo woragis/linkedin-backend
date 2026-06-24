@@ -91,6 +91,103 @@ LIMIT ?
 	return nodes, err
 }
 
+func (r *Repository) LabSample(
+	ctx context.Context,
+	seed uuid.UUID,
+	limit int,
+) ([]GraphNode, []GraphEdge, int, int, uuid.UUID, error) {
+	if limit <= 0 || limit > 300 {
+		limit = 150
+	}
+
+	var totalUsers, totalEdges int
+	if err := r.db.WithContext(ctx).Raw(`
+SELECT
+  (SELECT COUNT(*)::int FROM profiles),
+  (SELECT COUNT(*)::int FROM connections WHERE status = 'accepted')
+`).Row().Scan(&totalUsers, &totalEdges); err != nil {
+		return nil, nil, 0, 0, uuid.Nil, err
+	}
+
+	if seed == uuid.Nil {
+		if err := r.db.WithContext(ctx).Raw(`
+SELECT p.user_id
+FROM profiles p
+LEFT JOIN user_graph_metrics gm ON gm.user_id = p.user_id
+ORDER BY COALESCE(gm.pagerank, 0) DESC, p.full_name
+LIMIT 1
+`).Scan(&seed).Error; err != nil {
+			return nil, nil, 0, 0, uuid.Nil, err
+		}
+		if seed == uuid.Nil {
+			return []GraphNode{}, []GraphEdge{}, totalUsers, totalEdges, uuid.Nil, nil
+		}
+	}
+
+	var nodes []GraphNode
+	err := r.db.WithContext(ctx).Raw(`
+WITH RECURSIVE bfs AS (
+  SELECT user_id, 0 AS depth
+  FROM profiles
+  WHERE user_id = ?
+  UNION
+  SELECT
+    CASE WHEN c.requester_id = b.user_id THEN c.addressee_id ELSE c.requester_id END,
+    b.depth + 1
+  FROM bfs b
+  JOIN connections c ON c.status = 'accepted'
+    AND (c.requester_id = b.user_id OR c.addressee_id = b.user_id)
+  WHERE b.depth < 8
+),
+picked AS (
+  SELECT DISTINCT user_id FROM bfs LIMIT ?
+)
+SELECT p.user_id, p.slug, p.full_name, p.headline,
+       COALESCE(gm.pagerank, 0), COALESCE(gm.degree, 0), gm.community_id
+FROM picked pk
+JOIN profiles p ON p.user_id = pk.user_id
+LEFT JOIN user_graph_metrics gm ON gm.user_id = p.user_id
+`, seed, limit).Scan(&nodes).Error
+	if err != nil {
+		return nil, nil, 0, 0, uuid.Nil, err
+	}
+	if len(nodes) == 0 {
+		return []GraphNode{}, []GraphEdge{}, totalUsers, totalEdges, seed, nil
+	}
+
+	var edges []GraphEdge
+	err = r.db.WithContext(ctx).Raw(`
+WITH RECURSIVE bfs AS (
+  SELECT user_id, 0 AS depth
+  FROM profiles
+  WHERE user_id = ?
+  UNION
+  SELECT
+    CASE WHEN c.requester_id = b.user_id THEN c.addressee_id ELSE c.requester_id END,
+    b.depth + 1
+  FROM bfs b
+  JOIN connections c ON c.status = 'accepted'
+    AND (c.requester_id = b.user_id OR c.addressee_id = b.user_id)
+  WHERE b.depth < 8
+),
+picked AS (
+  SELECT DISTINCT user_id FROM bfs LIMIT ?
+)
+SELECT c.requester_id, c.addressee_id
+FROM connections c
+WHERE c.status = 'accepted'
+  AND c.requester_id IN (SELECT user_id FROM picked)
+  AND c.addressee_id IN (SELECT user_id FROM picked)
+`, seed, limit).Scan(&edges).Error
+	if err != nil {
+		return nil, nil, 0, 0, uuid.Nil, err
+	}
+	if edges == nil {
+		edges = []GraphEdge{}
+	}
+	return nodes, edges, totalUsers, totalEdges, seed, nil
+}
+
 func (r *Repository) LinkPredictions(ctx context.Context, viewerID uuid.UUID, limit int) ([]LinkPrediction, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10

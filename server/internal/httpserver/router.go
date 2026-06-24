@@ -170,6 +170,9 @@ func Mount(mux *http.ServeMux, multi *MultiApp) {
 	mux.Handle("GET /v1/network/link-predictions", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
 		newGraphHandler(app.Graph).linkPredictions(w, r)
 	}))
+	mux.Handle("GET /v1/network/lab-sample", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
+		newGraphHandler(app.Graph).labSample(w, r)
+	}))
 
 	mux.Handle("GET /v1/analytics/overview", multi.require(func(app *App, w http.ResponseWriter, r *http.Request) {
 		newAnalyticsHandler(app.Analytics).overview(w, r)
