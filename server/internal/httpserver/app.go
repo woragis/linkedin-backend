@@ -7,6 +7,7 @@ import (
 	eventsvc "github.com/unipe/linkedin/backend/server/internal/event/service"
 	experimentsvc "github.com/unipe/linkedin/backend/server/internal/experiment/service"
 	graphsvc "github.com/unipe/linkedin/backend/server/internal/graph/service"
+	"github.com/unipe/linkedin/backend/server/internal/platform/llm"
 	postsvc "github.com/unipe/linkedin/backend/server/internal/post/service"
 	profilesvc "github.com/unipe/linkedin/backend/server/internal/profile/service"
 	recosvc "github.com/unipe/linkedin/backend/server/internal/recommendation/service"
@@ -31,4 +32,5 @@ type App struct {
 	Analytics       *analyticsvc.Service
 	Experiments     *experimentsvc.Service
 	Seed            *seedsvc.Service
+	LLM             *llm.Runner
 }

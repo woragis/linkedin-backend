@@ -59,3 +59,14 @@ def simulator_target_count() -> int:
     if SIMULATOR_MODE == "graph_only":
         return SIMULATOR_VOLUME_AGENT_COUNT
     return SIMULATOR_AGENT_COUNT
+
+
+# LLM (R4 — live simulator + e2e)
+SIMULATOR_LLM = os.getenv("SIMULATOR_LLM", "0").lower() in ("1", "true", "yes")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+SIMULATOR_LLM_MAX_PER_MIN = int(os.getenv("SIMULATOR_LLM_MAX_PER_MIN", "12"))
+SIMULATOR_LLM_MAX_PER_DAY = int(os.getenv("SIMULATOR_LLM_MAX_PER_DAY", "800"))
+LLM_TIMEOUT_SEC = float(os.getenv("LLM_TIMEOUT_SEC", "30"))
+DATABASE_URL_LIVE = normalize_database_url(os.getenv("DATABASE_URL_LIVE", ""))

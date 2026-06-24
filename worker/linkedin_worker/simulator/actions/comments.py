@@ -15,16 +15,32 @@ def comment_on_post(
     post_id: UUID,
     rng: random.Random,
     topic: str,
+    *,
+    agent=None,
+    post_body_text: str = "",
+    parent_comment_id: UUID | None = None,
+    parent_body: str | None = None,
 ) -> UUID | None:
-    body = pick_comment_body(rng, topic)
+    if agent is not None:
+        from linkedin_worker.simulator.content.generator import comment_body as gen_comment
+
+        body = gen_comment(
+            rng,
+            agent,
+            topic,
+            post_body_text=post_body_text,
+            parent_comment=parent_body,
+        )
+    else:
+        body = pick_comment_body(rng, topic)
     comment_id = uuid4()
     row = conn.execute(
         """
-        INSERT INTO comments (id, post_id, author_id, body)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO comments (id, post_id, author_id, body, parent_comment_id)
+        VALUES (%s, %s, %s, %s, %s)
         RETURNING id
         """,
-        (comment_id, post_id, user_id, body),
+        (comment_id, post_id, user_id, body, parent_comment_id),
     ).fetchone()
     if not row:
         return None

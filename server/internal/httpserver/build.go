@@ -18,6 +18,7 @@ import (
 	graphsvc "github.com/unipe/linkedin/backend/server/internal/graph/service"
 	jwtmgr "github.com/unipe/linkedin/backend/server/internal/platform/jwt"
 	"github.com/unipe/linkedin/backend/server/internal/platform/cache"
+	"github.com/unipe/linkedin/backend/server/internal/platform/llm"
 	"github.com/unipe/linkedin/backend/server/internal/platform/realm"
 	"github.com/unipe/linkedin/backend/server/internal/search/elasticsearch"
 	postrepo "github.com/unipe/linkedin/backend/server/internal/post/repository"
@@ -74,6 +75,8 @@ func BuildApp(cfg BuildConfig) *App {
 	analyticsRepository := analyticsrepo.New(db)
 	analyticsService := analyticsvc.New(analyticsRepository, experimentRepository)
 	seedService := seedsvc.New(authService, profileService, catalogRepository, profileRepository, connectionService, postService)
+	llmClient := llm.NewFromEnv()
+	llmRunner := llm.NewRunner(llmClient, authRepository, profileRepository, postService)
 
 	return &App{
 		DB:                db,
@@ -90,6 +93,7 @@ func BuildApp(cfg BuildConfig) *App {
 		Analytics:         analyticsService,
 		Experiments:       experimentService,
 		Seed:              seedService,
+		LLM:               llmRunner,
 	}
 }
 

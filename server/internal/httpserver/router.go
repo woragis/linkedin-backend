@@ -200,6 +200,14 @@ func Mount(mux *http.ServeMux, multi *MultiApp) {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		newInternalHandler(app.InternalJobSecret, app.Seed).seedDemo(w, r)
+		newInternalHandler(app.InternalJobSecret, app.Seed, app.LLM).seedDemo(w, r)
+	})
+	mux.HandleFunc("POST /v1/internal/live-llm-run", func(w http.ResponseWriter, r *http.Request) {
+		app := multi.AppFor(r)
+		if app == nil {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		newInternalHandler(app.InternalJobSecret, app.Seed, app.LLM).liveLLMRun(w, r)
 	})
 }

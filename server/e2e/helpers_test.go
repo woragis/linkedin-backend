@@ -94,6 +94,34 @@ func seedDemo(t *testing.T) {
 	}
 }
 
+func liveRealmHeaders() map[string]string {
+	return map[string]string{"X-App-Realm": "live"}
+}
+
+func liveInternalHeaders() map[string]string {
+	return map[string]string{
+		"X-Internal-Token": internalToken(),
+		"X-App-Realm":        "live",
+	}
+}
+
+func seedDemoLive(t *testing.T) {
+	t.Helper()
+	code, body := httpJSON(t, http.MethodPost, "/v1/internal/seed-demo", nil, liveInternalHeaders())
+	if code != http.StatusCreated && code != http.StatusOK {
+		t.Fatalf("POST seed-demo (live) status=%d body=%v", code, body)
+	}
+}
+
+func listCommentsLive(t *testing.T, token, postID string) []any {
+	t.Helper()
+	code, arr := httpJSONArray(t, http.MethodGet, "/v1/posts/"+postID+"/comments", nil, mergeHeaders(authHeader(token), liveRealmHeaders()))
+	if code != http.StatusOK {
+		t.Fatalf("list comments (live) status=%d", code)
+	}
+	return arr
+}
+
 func listComments(t *testing.T, token, postID string) []any {
 	t.Helper()
 	code, arr := httpJSONArray(t, http.MethodGet, "/v1/posts/"+postID+"/comments", nil, authHeader(token))

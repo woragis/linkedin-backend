@@ -11,11 +11,17 @@ func TestE2E_R2_FiveUsersTwoPostsTenInteractions(t *testing.T) {
 	waitReady(t)
 	seedDemo(t)
 
-	ana := login(t, demoUser("ana"))
-	bruno := login(t, demoUser("bruno"))
-	carla := login(t, demoUser("carla"))
-	diego := login(t, demoUser("diego"))
-	elisa := login(t, demoUser("elisa"))
+	anaEmail, anaPwd := demoUser("ana")
+	brunoEmail, brunoPwd := demoUser("bruno")
+	carlaEmail, carlaPwd := demoUser("carla")
+	diegoEmail, diegoPwd := demoUser("diego")
+	elisaEmail, elisaPwd := demoUser("elisa")
+
+	ana := login(t, anaEmail, anaPwd)
+	bruno := login(t, brunoEmail, brunoPwd)
+	carla := login(t, carlaEmail, carlaPwd)
+	diego := login(t, diegoEmail, diegoPwd)
+	elisa := login(t, elisaEmail, elisaPwd)
 
 	post1 := createPost(t, ana, "E2E R2 post 1")
 	post2 := createPost(t, bruno, "E2E R2 post 2")

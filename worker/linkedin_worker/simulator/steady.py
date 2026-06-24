@@ -17,7 +17,7 @@ from linkedin_worker.simulator.actions.events import post_viewed
 from linkedin_worker.simulator.actions.posts import create_post, session_start
 from linkedin_worker.simulator.actions.reactions import like_post
 from linkedin_worker.simulator.agent import Agent
-from linkedin_worker.simulator.content.templates import pick_post_body
+from linkedin_worker.simulator.content.generator import comment_body, post_body
 from linkedin_worker.simulator.db import (
     batch_update_markov_states,
     load_global_recent_posts,
@@ -84,6 +84,14 @@ def _posts_for_agent(
     return [(post_id, author_id) for post_id, author_id in global_posts if author_id != agent_id]
 
 
+def _load_post_body(conn: psycopg.Connection, post_id: UUID) -> str:
+    row = conn.execute(
+        "SELECT body FROM posts WHERE id = %s AND deleted_at IS NULL",
+        (post_id,),
+    ).fetchone()
+    return row[0] if row else ""
+
+
 def _execute_action(
     conn: psycopg.Connection,
     agent: Agent,
@@ -95,7 +103,7 @@ def _execute_action(
     counts: Counter[str],
 ) -> bool:
     if action == "post":
-        body = pick_post_body(rng, topic)
+        body = post_body(rng, agent, topic)
         create_post(conn, agent.user_id, body)
         counts["post"] += 1
         return True
@@ -112,7 +120,7 @@ def _execute_action(
 
     posts = _posts_for_agent(global_posts, agent.user_id)
     if not posts:
-        body = pick_post_body(rng, topic)
+        body = post_body(rng, agent, topic)
         create_post(conn, agent.user_id, body)
         counts["post"] += 1
         return True
@@ -124,7 +132,8 @@ def _execute_action(
             counts["like"] += 1
             return True
     elif action == "comment":
-        if comment_on_post(conn, agent.user_id, post_id, rng, topic):
+        post_text = _load_post_body(conn, post_id)
+        if comment_on_post(conn, agent.user_id, post_id, rng, topic, agent=agent, post_body_text=post_text):
             counts["comment"] += 1
             return True
     elif action == "view":
